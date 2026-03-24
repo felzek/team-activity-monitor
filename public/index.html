@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Activity Monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="landing-body">
+    <header class="site-header">
+      <a href="/" class="brand">
+        <span class="brand-mark">TAM</span>
+        <span>Team Activity Monitor</span>
+      </a>
+      <nav class="site-nav">
+        <a href="#how-it-works">How it works</a>
+        <a href="#features">Features</a>
+        <a href="/docs">Docs</a>
+        <a href="/security">Security</a>
+        <a href="/status">Status</a>
+        <a href="/login" class="nav-link">Log in</a>
+        <a href="/register" class="nav-cta">Create account</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero-section">
+        <div class="hero-copy">
+          <p class="eyebrow">Grounded Jira + GitHub visibility for modern teams</p>
+          <h1>Turn scattered delivery signals into one accountable answer.</h1>
+          <p class="hero-text">
+            Team Activity Monitor gives engineering, delivery, and operations teams a workspace for
+            asking natural-language questions about recent work without blurring Jira assignments
+            and GitHub activity together. Every answer is grounded, saved, auditable, and tied to
+            the organization that requested it.
+          </p>
+          <div class="hero-actions">
+            <a href="/register" class="button-primary">Start a workspace</a>
+            <a href="/docs" class="button-secondary">See the operator guide</a>
+          </div>
+          <ul class="hero-points">
+            <li>Multi-organization workspace model with roles, invites, and audit events</li>
+            <li>Grounded activity summaries with connector health and partial-data caveats</li>
+            <li>Production scaffolding for AWS, GitHub Actions, and enterprise operations</li>
+          </ul>
+        </div>
+
+        <div class="hero-card hero-stack">
+          <p class="card-label">Example answer</p>
+          <pre class="hero-pre">Overview:
+John Doe appears active during the last 14 days. Jira shows 1 assigned issue and GitHub shows 2 signals.
+
+Jira:
+- OPS-17 [In Progress] Harden deploy rollback path.
+
+GitHub:
+- acme/team-portal#142 [open] Ground the member activity response renderer.
+
+Caveats:
+- Jira reflects assigned work; GitHub reflects recent code activity.</pre>
+          <div class="hero-footnote">
+            <strong>Enterprise-ready shape</strong>
+            <p>Org-aware APIs, admin controls, auditability, and deployable AWS/GitHub production scaffolding.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="feature-section">
+        <div class="section-heading">
+          <p class="eyebrow">What this application does</p>
+          <h2>Built for clarity, control, and operational trust.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Organization workspaces</h3>
+            <p>
+              Every account belongs to one or more organizations with explicit roles, a current
+              workspace context, and member invitation flows.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Grounded activity answers</h3>
+            <p>
+              Jira and GitHub are fetched separately, normalized centrally, and rendered into one
+              concise response with explicit caveats and connector status.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Admin and audit controls</h3>
+            <p>
+              Owners and admins can manage integrations, review recent activity, inspect audit
+              events, and configure tracked teammates and repositories.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="feature-section">
+        <div class="section-heading">
+          <p class="eyebrow">Production posture</p>
+          <h2>Designed to graduate from prototype to sell-now SaaS.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Operationally honest</h3>
+            <p>
+              Partial provider failures stay visible, connector status is surfaced, and history is
+              preserved per organization for review.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Infrastructure-ready</h3>
+            <p>
+              The repo now includes Terraform, container packaging, health endpoints, and GitHub
+              Actions workflow scaffolding for staged AWS deployment.
+            </p>
+          </article>
+          <article class="feature-card">
+            <h3>Security-aware defaults</h3>
+            <p>
+              CSRF protection, secure cookie policy, rate limiting, structured logging, and
+              audit-event capture are built into the application path.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="how-it-works" class="steps-section">
+        <div class="section-heading">
+          <p class="eyebrow">How to use it</p>
+          <h2>From setup to grounded answers in four steps.</h2>
+        </div>
+        <div class="steps-grid">
+          <article class="step-card">
+            <span>01</span>
+            <h3>Create a workspace</h3>
+            <p>Register an owner account and start an organization for your team.</p>
+          </article>
+          <article class="step-card">
+            <span>02</span>
+            <h3>Configure members and repos</h3>
+            <p>Seed the workspace with the team members and tracked repositories that define query scope.</p>
+          </article>
+          <article class="step-card">
+            <span>03</span>
+            <h3>Set connector references</h3>
+            <p>Save Jira and GitHub secret references and enable the providers you want available in the workspace.</p>
+          </article>
+          <article class="step-card">
+            <span>04</span>
+            <h3>Ask and review</h3>
+            <p>Run natural-language queries, inspect audit logs, reuse saved answers, and manage invites from the same dashboard.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="cta-section">
+        <div class="cta-card">
+          <div>
+            <p class="eyebrow">Ready to evaluate it?</p>
+            <h2>Start with the dashboard, then review the docs and security posture.</h2>
+          </div>
+          <div class="hero-actions">
+            <a href="/register" class="button-primary">Create account</a>
+            <a href="/security" class="button-secondary">Review security</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: team-activity-monitor
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health/ready
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: staging
+      - key: APP_BASE_URL
+        sync: false
+      - key: APP_TIMEZONE
+        value: America/New_York
+      - key: USE_RECORDED_FIXTURES
+        value: "true"
+      - key: TEAM_MEMBERS_CONFIG
+        value: config/team-members.json
+      - key: TRACKED_REPOS_CONFIG
+        value: config/repos.json
+      - key: FIXTURE_DIR
+        value: fixtures/demo
+      - key: DATABASE_PATH
+        value: /tmp/team-activity-monitor.db
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: OPENAI_MODEL
+        value: gpt-5-mini

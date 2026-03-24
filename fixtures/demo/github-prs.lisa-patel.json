@@ -1,0 +1,24 @@
+{
+  "commits": [],
+  "pullRequests": [
+    {
+      "repo": "acme/team-portal",
+      "number": 155,
+      "title": "Add partial-result banner handling to the demo UI",
+      "state": "open",
+      "updatedAt": "2026-03-24T13:05:00.000Z",
+      "isOpen": true,
+      "url": "https://github.com/acme/team-portal/pull/155"
+    },
+    {
+      "repo": "acme/payments-api",
+      "number": 311,
+      "title": "Document GitHub repo allow-list caveat",
+      "state": "closed",
+      "updatedAt": "2026-03-21T09:40:00.000Z",
+      "isOpen": false,
+      "url": "https://github.com/acme/payments-api/pull/311"
+    }
+  ],
+  "recentRepos": ["acme/team-portal", "acme/payments-api"]
+}

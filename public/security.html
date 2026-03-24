@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Security | Team Activity Monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="landing-body">
+    <header class="site-header">
+      <a href="/" class="brand">
+        <span class="brand-mark">TAM</span>
+        <span>Team Activity Monitor</span>
+      </a>
+      <nav class="site-nav">
+        <a href="/">Home</a>
+        <a href="/docs">Docs</a>
+        <a href="/status">Status</a>
+        <a href="/login" class="nav-link">Log in</a>
+      </nav>
+    </header>
+
+    <main class="docs-main">
+      <section class="docs-hero">
+        <p class="eyebrow">Security overview</p>
+        <h1>Operational and application security posture</h1>
+        <p class="hero-text">
+          This implementation includes local security controls in code now and AWS-oriented
+          production scaffolding for secrets management, deployment isolation, and observability.
+        </p>
+      </section>
+
+      <section class="docs-grid">
+        <article class="feature-card">
+          <h3>Application controls</h3>
+          <p>Secure cookies, CSRF protection, explicit role checks, rate limiting, and strict browser security headers are enabled in the app path.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Auditability</h3>
+          <p>Sign-in events, invitations, connector changes, workspace settings changes, and query execution are all recorded as audit events.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Secrets posture</h3>
+          <p>Connector metadata stores only secret references. Production deployment is prepared for AWS Secrets Manager instead of database-held tokens.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Production deployment</h3>
+          <p>The repository includes Terraform and GitHub Actions scaffolding for AWS-hosted infrastructure, staged deployments, and OIDC-based cloud access.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Data model</h3>
+          <p>Organization scoping is explicit across memberships, connectors, query runs, audit events, and background jobs.</p>
+        </article>
+        <article class="feature-card">
+          <h3>Known roadmap items</h3>
+          <p>Cognito federation, Redis-backed rate limiting, managed queues, and AWS-native secret retrieval are scaffolded operationally and documented for production rollout.</p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

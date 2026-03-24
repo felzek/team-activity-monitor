@@ -1,0 +1,192 @@
+import type { Logger } from "pino";
+
+import type { AppConfig } from "../config.js";
+import { loadFixture } from "../lib/fixtures.js";
+import { fetchJson } from "../lib/http.js";
+import { isWithinTimeframe } from "../query/timeframe.js";
+import type { JiraIssueChange, ResolvedTimeframe, TeamMember } from "../types/activity.js";
+import type { JiraAdapterResult } from "../types/jira.js";
+
+interface JiraSearchResponse {
+  issues: Array<{
+    key: string;
+    fields: {
+      summary?: string;
+      updated?: string;
+      status?: { name?: string };
+      priority?: { name?: string };
+      issuetype?: { name?: string };
+    };
+  }>;
+}
+
+interface JiraUserSearchResponseEntry {
+  accountId: string;
+  displayName: string;
+}
+
+interface JiraChangelogResponse {
+  values: Array<{
+    created: string;
+    author?: {
+      displayName?: string;
+    };
+    items?: Array<{
+      field?: string;
+      fromString?: string;
+      toString?: string;
+    }>;
+  }>;
+}
+
+function buildJiraAuthHeader(config: AppConfig): string {
+  return `Basic ${Buffer.from(
+    `${config.jiraEmail ?? ""}:${config.jiraApiToken ?? ""}`
+  ).toString("base64")}`;
+}
+
+async function resolveJiraAccountId(
+  config: AppConfig,
+  member: TeamMember,
+  logger: Logger
+): Promise<{ accountId: string; displayName: string }> {
+  if (member.jiraAccountId) {
+    return {
+      accountId: member.jiraAccountId,
+      displayName: member.displayName
+    };
+  }
+
+  const query = encodeURIComponent(member.jiraQuery ?? member.displayName);
+  const url = `${config.jiraBaseUrl}/rest/api/3/user/search?query=${query}&maxResults=10`;
+  const users = await fetchJson<JiraUserSearchResponseEntry[]>(
+    url,
+    {
+      method: "GET",
+      headers: {
+        Authorization: buildJiraAuthHeader(config)
+      }
+    },
+    {
+      provider: "jira",
+      logger
+    }
+  );
+
+  const exactMatch =
+    users.find(
+      (user) =>
+        user.displayName.toLowerCase() ===
+        (member.jiraQuery ?? member.displayName).toLowerCase()
+    ) ?? users[0];
+
+  if (!exactMatch) {
+    throw new Error(`No Jira user found for ${member.displayName}.`);
+  }
+
+  return {
+    accountId: exactMatch.accountId,
+    displayName: exactMatch.displayName
+  };
+}
+
+async function fetchIssueChanges(
+  config: AppConfig,
+  issueKey: string,
+  logger: Logger
+): Promise<JiraIssueChange[]> {
+  const url = `${config.jiraBaseUrl}/rest/api/3/issue/${issueKey}/changelog?maxResults=10`;
+  const changelog = await fetchJson<JiraChangelogResponse>(
+    url,
+    {
+      method: "GET",
+      headers: {
+        Authorization: buildJiraAuthHeader(config)
+      }
+    },
+    {
+      provider: "jira",
+      logger
+    }
+  );
+
+  return changelog.values.flatMap((entry) =>
+    (entry.items ?? []).map((item) => ({
+      at: entry.created,
+      field: item.field ?? "unknown",
+      from: item.fromString,
+      to: item.toString,
+      author: entry.author?.displayName
+    }))
+  );
+}
+
+export async function fetchJiraActivity(
+  config: AppConfig,
+  member: TeamMember,
+  timeframe: ResolvedTimeframe,
+  logger: Logger
+): Promise<JiraAdapterResult> {
+  if (config.useRecordedFixtures) {
+    return loadFixture<JiraAdapterResult>(config.fixtureDir, `jira.${member.id}.json`);
+  }
+
+  const identity = await resolveJiraAccountId(config, member, logger);
+  const jql = `assignee = "${identity.accountId}" AND statusCategory != Done ORDER BY updated DESC`;
+
+  const searchResponse = await fetchJson<JiraSearchResponse>(
+    `${config.jiraBaseUrl}/rest/api/3/search/jql`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: buildJiraAuthHeader(config),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        jql,
+        maxResults: 10,
+        fields: ["summary", "status", "priority", "updated", "issuetype", "assignee"],
+        fieldsByKeys: false,
+        failFast: true
+      })
+    },
+    {
+      provider: "jira",
+      logger
+    }
+  );
+
+  const topIssues = searchResponse.issues.slice(0, 10);
+  const issuesWithChanges = await Promise.all(
+    topIssues.map(async (issue, index) => {
+      const recentChanges =
+        index < 5 ? await fetchIssueChanges(config, issue.key, logger) : [];
+
+      return {
+        key: issue.key,
+        summary: issue.fields.summary ?? "Untitled issue",
+        status: issue.fields.status?.name ?? "Unknown",
+        priority: issue.fields.priority?.name,
+        issueType: issue.fields.issuetype?.name,
+        updated: issue.fields.updated ?? timeframe.start,
+        url: `${config.jiraBaseUrl}/browse/${issue.key}`,
+        recentChanges
+      };
+    })
+  );
+
+  const recentUpdateCount = issuesWithChanges.reduce((count, issue) => {
+    const hasRecentChange =
+      isWithinTimeframe(issue.updated, timeframe) ||
+      issue.recentChanges.some((change) => isWithinTimeframe(change.at, timeframe));
+
+    return count + (hasRecentChange ? 1 : 0);
+  }, 0);
+
+  return {
+    accountId: identity.accountId,
+    displayName: identity.displayName,
+    issues: issuesWithChanges,
+    recentUpdateCount
+  };
+}

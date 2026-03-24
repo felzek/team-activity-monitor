@@ -1,0 +1,13 @@
+{
+  "commits": [
+    {
+      "repo": "acme/payments-api",
+      "sha": "9abc123",
+      "message": "Improve provider timeout logging",
+      "authoredAt": "2026-03-23T08:35:00.000Z",
+      "url": "https://github.com/acme/payments-api/commit/9abc123"
+    }
+  ],
+  "pullRequests": [],
+  "recentRepos": ["acme/payments-api"]
+}

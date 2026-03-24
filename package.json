@@ -1,0 +1,49 @@
+{
+  "name": "team-activity-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke.ts",
+    "cli": "tsx src/cli.ts",
+    "docker:build": "docker build -t team-activity-monitor:local .",
+    "terraform:fmt": "terraform -chdir=terraform fmt -check -recursive",
+    "terraform:validate": "terraform -chdir=terraform init -backend=false && terraform -chdir=terraform validate",
+    "plan:generate": "tsx scripts/generate-plan-folder.ts",
+    "plan:taiga:dry": "tsx scripts/taiga-import.ts --dry-run",
+    "plan:taiga:create": "tsx scripts/taiga-import.ts --create"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.8.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "luxon": "^3.7.2",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.18.2",
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^25.5.0",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}

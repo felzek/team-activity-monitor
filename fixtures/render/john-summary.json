@@ -1,0 +1,64 @@
+{
+  "member": {
+    "displayName": "John Doe",
+    "id": "john-doe",
+    "jiraAccountId": "fixture-john-account-id",
+    "githubUsername": "john-doe",
+    "queryText": "John"
+  },
+  "intent": "activity_summary",
+  "timeframe": {
+    "kind": "trailing_days",
+    "label": "the last 14 days",
+    "start": "2026-03-10T00:00:00.000Z",
+    "end": "2026-03-24T18:00:00.000Z",
+    "timezone": "America/New_York"
+  },
+  "needsClarification": false,
+  "clarificationReason": null,
+  "jira": {
+    "status": {
+      "provider": "jira",
+      "ok": true,
+      "partial": false,
+      "latencyMs": 0
+    },
+    "data": {
+      "issues": [
+        {
+          "key": "OPS-17",
+          "summary": "Harden deploy rollback path",
+          "status": "In Progress",
+          "priority": "High",
+          "issueType": "Task",
+          "updated": "2026-03-23T15:20:00.000Z",
+          "url": "https://example.atlassian.net/browse/OPS-17",
+          "recentChanges": []
+        }
+      ],
+      "recentUpdateCount": 1
+    }
+  },
+  "github": {
+    "status": {
+      "provider": "github",
+      "ok": true,
+      "partial": false,
+      "latencyMs": 0
+    },
+    "data": {
+      "commits": [
+        {
+          "repo": "acme/team-portal",
+          "sha": "1a2b3c4",
+          "message": "Add team member alias fallback",
+          "authoredAt": "2026-03-24T10:20:00.000Z",
+          "url": "https://github.com/acme/team-portal/commit/1a2b3c4"
+        }
+      ],
+      "pullRequests": [],
+      "recentRepos": ["acme/team-portal"]
+    }
+  },
+  "caveats": []
+}

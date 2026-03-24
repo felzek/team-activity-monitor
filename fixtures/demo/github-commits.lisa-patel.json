@@ -1,0 +1,13 @@
+{
+  "commits": [
+    {
+      "repo": "acme/team-portal",
+      "sha": "ff09aa1",
+      "message": "Refine response section spacing",
+      "authoredAt": "2026-03-22T16:55:00.000Z",
+      "url": "https://github.com/acme/team-portal/commit/ff09aa1"
+    }
+  ],
+  "pullRequests": [],
+  "recentRepos": ["acme/team-portal"]
+}

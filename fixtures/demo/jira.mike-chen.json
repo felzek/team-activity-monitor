@@ -1,0 +1,25 @@
+{
+  "accountId": "fixture-mike-account-id",
+  "displayName": "Mike Chen",
+  "issues": [
+    {
+      "key": "DATA-12",
+      "summary": "Backfill activity summary fixture set",
+      "status": "In Progress",
+      "priority": "High",
+      "issueType": "Task",
+      "updated": "2026-03-21T13:40:00.000Z",
+      "url": "https://example.atlassian.net/browse/DATA-12",
+      "recentChanges": [
+        {
+          "at": "2026-03-21T13:40:00.000Z",
+          "field": "assignee",
+          "from": "Unassigned",
+          "to": "Mike Chen",
+          "author": "Avery Hall"
+        }
+      ]
+    }
+  ],
+  "recentUpdateCount": 1
+}

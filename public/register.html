@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Account | Team Activity Monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="auth-body">
+    <main class="auth-shell">
+      <section class="auth-panel">
+        <a href="/" class="mini-brand">Team Activity Monitor</a>
+        <p class="eyebrow">New workspace</p>
+        <h1>Create your account</h1>
+        <p class="auth-copy">
+          Start a workspace for your team or accept an invite into an existing organization. Local
+          auth is active in this environment, with Cognito-ready production scaffolding prepared for
+          deployment.
+        </p>
+        <div id="invitation-panel" class="info-panel hidden">
+          <p id="invitation-message" class="auth-status">Invitation loading...</p>
+        </div>
+        <form id="auth-form" class="auth-form" data-mode="register">
+          <input id="invite-token" type="hidden" name="inviteToken" value="" />
+          <label>
+            <span>Name</span>
+            <input type="text" name="name" autocomplete="name" required />
+          </label>
+          <label>
+            <span>Email</span>
+            <input type="email" name="email" autocomplete="email" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input type="password" name="password" autocomplete="new-password" required />
+          </label>
+          <label id="organization-field">
+            <span>Workspace name</span>
+            <input
+              type="text"
+              name="organizationName"
+              autocomplete="organization"
+              placeholder="Acme Revenue Ops"
+            />
+          </label>
+          <button type="submit" class="button-primary auth-button">Create account</button>
+          <p id="auth-status" class="auth-status">Ready.</p>
+        </form>
+        <p class="auth-switch">
+          Already signed up?
+          <a href="/login">Log in here</a>
+        </p>
+      </section>
+    </main>
+    <script src="/auth.js"></script>
+  </body>
+</html>

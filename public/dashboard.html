@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workspace | Team Activity Monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+    <header class="dashboard-header">
+      <div>
+        <p class="eyebrow">Workspace</p>
+        <h1>Enterprise Activity Control Center</h1>
+        <p class="dashboard-subhead">
+          Run grounded teammate queries, manage workspace settings, and review operational signals
+          from one place.
+        </p>
+      </div>
+      <div class="dashboard-userbar">
+        <div>
+          <p class="user-label">Signed in as</p>
+          <strong id="user-name">Loading...</strong>
+          <p id="org-role" class="muted-meta">Role loading...</p>
+        </div>
+        <button id="logout-button" class="button-secondary">Log out</button>
+      </div>
+    </header>
+
+    <main class="dashboard-grid enterprise-grid">
+      <section class="dashboard-panel workspace-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Current workspace</p>
+            <h2 id="org-name">Loading organization...</h2>
+          </div>
+          <span id="status-pill" class="status-pill">Ready</span>
+        </div>
+        <div class="workspace-meta">
+          <label class="stacked-field">
+            <span class="field-label">Switch organization</span>
+            <select id="org-selector" class="select-input"></select>
+          </label>
+          <div class="metric-row">
+            <article class="metric-card">
+              <span class="metric-label">Workspace slug</span>
+              <strong id="org-slug">-</strong>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">Members</span>
+              <strong id="member-count">0</strong>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">Recent queries</span>
+              <strong id="query-count">0</strong>
+            </article>
+            <article class="metric-card">
+              <span class="metric-label">Audit events</span>
+              <strong id="audit-count">0</strong>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-panel query-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Ask a question</p>
+            <h2>What is someone working on?</h2>
+          </div>
+        </div>
+        <form id="query-form" class="dashboard-form">
+          <label for="query" class="field-label">Question</label>
+          <textarea
+            id="query"
+            name="query"
+            rows="4"
+            placeholder="What is John working on these days?"
+          >What is John working on these days?</textarea>
+          <div class="dashboard-actions">
+            <button type="submit" class="button-primary">Run query</button>
+            <button type="button" id="use-example" class="button-secondary">Use another example</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="dashboard-panel results-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Grounded answer</p>
+            <h2>Latest response</h2>
+          </div>
+        </div>
+        <div id="banner" class="dashboard-banner hidden"></div>
+        <pre id="response-text" class="response-text">Run a query to generate an answer.</pre>
+      </section>
+
+      <section class="dashboard-panel members-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Workspace members</p>
+            <h2>Roles and access</h2>
+          </div>
+        </div>
+        <div id="members-list" class="data-list">
+          <p class="history-empty">Members will appear here.</p>
+        </div>
+      </section>
+
+      <section class="dashboard-panel invite-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Invite workflow</p>
+            <h2>Add teammates</h2>
+          </div>
+        </div>
+        <form id="invite-form" class="dashboard-form compact-form">
+          <label>
+            <span class="field-label">Email</span>
+            <input id="invite-email" type="email" name="email" placeholder="teammate@example.com" required />
+          </label>
+          <label>
+            <span class="field-label">Role</span>
+            <select id="invite-role" name="role" class="select-input">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+              <option value="support">Support</option>
+            </select>
+          </label>
+          <button type="submit" class="button-primary">Create invite</button>
+        </form>
+        <div id="invite-list" class="data-list">
+          <p class="history-empty">Recent invitations will appear here.</p>
+        </div>
+      </section>
+
+      <section class="dashboard-panel integrations-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Connectors</p>
+            <h2>Jira and GitHub configuration</h2>
+          </div>
+        </div>
+        <div class="integration-grid">
+          <form id="jira-form" class="dashboard-form compact-form connector-form">
+            <h3>Jira</h3>
+            <label>
+              <span class="field-label">Secrets Manager reference</span>
+              <input id="jira-secret-ref" type="text" placeholder="prod/tam/jira" />
+            </label>
+            <label class="toggle-row">
+              <input id="jira-enabled" type="checkbox" checked />
+              <span>Enabled for queries</span>
+            </label>
+            <button type="submit" class="button-secondary">Save Jira connector</button>
+            <p id="jira-status" class="muted-meta">Status loading...</p>
+          </form>
+
+          <form id="github-form" class="dashboard-form compact-form connector-form">
+            <h3>GitHub</h3>
+            <label>
+              <span class="field-label">Secrets Manager reference</span>
+              <input id="github-secret-ref" type="text" placeholder="prod/tam/github" />
+            </label>
+            <label class="toggle-row">
+              <input id="github-enabled" type="checkbox" checked />
+              <span>Enabled for queries</span>
+            </label>
+            <button type="submit" class="button-secondary">Save GitHub connector</button>
+            <p id="github-status" class="muted-meta">Status loading...</p>
+          </form>
+        </div>
+      </section>
+
+      <section class="dashboard-panel settings-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Workspace settings</p>
+            <h2>Team members and tracked repos</h2>
+          </div>
+        </div>
+        <form id="settings-form" class="dashboard-form">
+          <label>
+            <span class="field-label">Team members JSON</span>
+            <textarea id="team-members-json" rows="10"></textarea>
+          </label>
+          <label>
+            <span class="field-label">Tracked repos JSON</span>
+            <textarea id="tracked-repos-json" rows="8"></textarea>
+          </label>
+          <button type="submit" class="button-primary">Save workspace settings</button>
+        </form>
+      </section>
+
+      <section class="dashboard-panel history-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Saved history</p>
+            <h2>Recent queries</h2>
+          </div>
+        </div>
+        <div id="history-list" class="history-list">
+          <p class="history-empty">Workspace query history will appear here.</p>
+        </div>
+      </section>
+
+      <section class="dashboard-panel audit-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Audit log</p>
+            <h2>Recent admin events</h2>
+          </div>
+        </div>
+        <div id="audit-list" class="data-list">
+          <p class="history-empty">Audit events will appear here.</p>
+        </div>
+      </section>
+
+      <section class="dashboard-panel jobs-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Background jobs</p>
+            <h2>Operational queue view</h2>
+          </div>
+        </div>
+        <div id="jobs-list" class="data-list">
+          <p class="history-empty">Queued jobs will appear here.</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="/dashboard.js"></script>
+  </body>
+</html>

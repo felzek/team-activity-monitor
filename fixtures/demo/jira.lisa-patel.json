@@ -1,0 +1,25 @@
+{
+  "accountId": "fixture-lisa-account-id",
+  "displayName": "Lisa Patel",
+  "issues": [
+    {
+      "key": "WEB-88",
+      "summary": "Polish partial-result banner copy",
+      "status": "In Progress",
+      "priority": "Medium",
+      "issueType": "Task",
+      "updated": "2026-03-24T12:00:00.000Z",
+      "url": "https://example.atlassian.net/browse/WEB-88",
+      "recentChanges": [
+        {
+          "at": "2026-03-24T12:00:00.000Z",
+          "field": "priority",
+          "from": "Low",
+          "to": "Medium",
+          "author": "Lisa Patel"
+        }
+      ]
+    }
+  ],
+  "recentUpdateCount": 1
+}

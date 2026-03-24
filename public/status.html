@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Status | Team Activity Monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="landing-body">
+    <header class="site-header">
+      <a href="/" class="brand">
+        <span class="brand-mark">TAM</span>
+        <span>Team Activity Monitor</span>
+      </a>
+      <nav class="site-nav">
+        <a href="/">Home</a>
+        <a href="/docs">Docs</a>
+        <a href="/security">Security</a>
+        <a href="/login" class="nav-link">Log in</a>
+      </nav>
+    </header>
+
+    <main class="docs-main">
+      <section class="docs-hero">
+        <p class="eyebrow">Status</p>
+        <h1>Current service health</h1>
+        <p class="hero-text">This page reflects the local environment’s readiness and runtime mode.</p>
+      </section>
+
+      <section class="dashboard-panel status-page-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Live status</p>
+            <h2 id="status-heading">Loading status...</h2>
+          </div>
+          <span id="status-page-pill" class="status-pill">Checking</span>
+        </div>
+        <pre id="status-page-json" class="response-text">Loading readiness details...</pre>
+      </section>
+    </main>
+
+    <script>
+      async function loadStatus() {
+        const [live, ready, startup] = await Promise.all([
+          fetch("/health/live").then((response) => response.json()),
+          fetch("/health/ready").then((response) => response.json()),
+          fetch("/health/startup").then((response) => response.json())
+        ]);
+
+        document.getElementById("status-heading").textContent = live.ok && ready.ok ? "All checks passing" : "Attention required";
+        document.getElementById("status-page-pill").textContent = ready.ok ? "Ready" : "Degraded";
+        document.getElementById("status-page-json").textContent = JSON.stringify(
+          { live, ready, startup },
+          null,
+          2
+        );
+      }
+
+      loadStatus().catch((error) => {
+        document.getElementById("status-heading").textContent = "Could not load status";
+        document.getElementById("status-page-pill").textContent = "Error";
+        document.getElementById("status-page-json").textContent = String(error);
+      });
+    </script>
+  </body>
+</html>

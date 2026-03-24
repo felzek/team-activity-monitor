@@ -1,0 +1,34 @@
+[
+  {
+    "id": "john-doe",
+    "displayName": "John Doe",
+    "aliases": ["john", "john doe", "john d"],
+    "jiraAccountId": "fixture-john-account-id",
+    "jiraQuery": "john doe",
+    "githubUsername": "john-doe"
+  },
+  {
+    "id": "sarah-lee",
+    "displayName": "Sarah Lee",
+    "aliases": ["sarah", "sarah lee"],
+    "jiraAccountId": "fixture-sarah-account-id",
+    "jiraQuery": "sarah lee",
+    "githubUsername": "sarah-lee"
+  },
+  {
+    "id": "mike-chen",
+    "displayName": "Mike Chen",
+    "aliases": ["mike", "mike chen"],
+    "jiraAccountId": "fixture-mike-account-id",
+    "jiraQuery": "mike chen",
+    "githubUsername": "mike-chen"
+  },
+  {
+    "id": "lisa-patel",
+    "displayName": "Lisa Patel",
+    "aliases": ["lisa", "lisa patel"],
+    "jiraAccountId": "fixture-lisa-account-id",
+    "jiraQuery": "lisa patel",
+    "githubUsername": "lisa-patel"
+  }
+]

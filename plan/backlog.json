@@ -1,0 +1,445 @@
+[
+  {
+    "ticket_key": "MVP-E1",
+    "issue_type": "Epic",
+    "title": "Foundation & Integrations",
+    "summary": "Secure startup and provider adapters",
+    "background_rationale": "Reliability depends on trustworthy data flow",
+    "scope": "Config|auth|identity normalization|Jira/GitHub adapters",
+    "out_of_scope": "OAuth multi-user|DB|background sync",
+    "acceptance_criteria": "Children complete; known user yields normalized payloads; missing config blocks startup",
+    "dependencies": [],
+    "priority": "P0",
+    "estimate": "8h roll-up",
+    "owner_role": "Tech Lead / Integrations",
+    "labels": [
+      "epic",
+      "foundation",
+      "integrations",
+      "critical-path"
+    ],
+    "risk_level": "High",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "src/config/*|src/adapters/*|config/*.json",
+    "test_notes": "Validated by child tickets and fixtures",
+    "rollback_or_fallback": "Use fixtures or single-provider demo",
+    "suggested_status": "Ready"
+  },
+  {
+    "ticket_key": "MVP-E2",
+    "issue_type": "Epic",
+    "title": "Query & Experience",
+    "summary": "Natural language to grounded answer",
+    "background_rationale": "This is the visible AI layer",
+    "scope": "Parsing|orchestration|rendering|web UI|thin CLI",
+    "out_of_scope": "Chat history|session memory|agent autonomy",
+    "acceptance_criteria": "End-to-end answer works; partial failures visible; web path demoable",
+    "dependencies": [
+      "MVP-E1"
+    ],
+    "priority": "P0",
+    "estimate": "7h roll-up",
+    "owner_role": "Tech Lead / Full-stack",
+    "labels": [
+      "epic",
+      "experience",
+      "query",
+      "critical-path"
+    ],
+    "risk_level": "High",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "src/query/*|src/orchestrator/*|src/render/*|public/*",
+    "test_notes": "Smoke questions and grounding checks",
+    "rollback_or_fallback": "\"Web first, CLI minimal\"",
+    "suggested_status": "Ready"
+  },
+  {
+    "ticket_key": "MVP-E3",
+    "issue_type": "Epic",
+    "title": "Quality Ops & Demo",
+    "summary": "Harden for review and demo",
+    "background_rationale": "Reviewer trust depends on reliability and clarity",
+    "scope": "Tests|logs|docs|fallback data|tracker exports",
+    "out_of_scope": "CI/CD|cloud deploy",
+    "acceptance_criteria": "Fixtures pass; fallback mode works; setup docs are reviewer-friendly",
+    "dependencies": [
+      "MVP-E1",
+      "MVP-E2"
+    ],
+    "priority": "P1",
+    "estimate": "4h roll-up",
+    "owner_role": "QA / PM / Presenter",
+    "labels": [
+      "epic",
+      "qa",
+      "demo",
+      "ops"
+    ],
+    "risk_level": "Medium",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "README.md|planning/*|fixtures/*",
+    "test_notes": "Smoke plus negative-path rehearsal",
+    "rollback_or_fallback": "Run recorded demo path if live APIs degrade",
+    "suggested_status": "Ready"
+  },
+  {
+    "ticket_key": "MVP-01",
+    "issue_type": "Story",
+    "title": "Bootstrap env schema and auth guardrails",
+    "summary": "Create TS runtime and fail-fast config",
+    "background_rationale": "Prevents lost time on bad tokens and missing scope",
+    "scope": "Express server|env validation|sample configs|auth smoke",
+    "out_of_scope": "OAuth login|secret manager",
+    "acceptance_criteria": "Dev server starts; health OK; missing env fails clearly; sample config documented",
+    "dependencies": [
+      "MVP-E1"
+    ],
+    "priority": "P0",
+    "estimate": "1.5h",
+    "owner_role": "Platform / Integrations",
+    "labels": [
+      "foundation",
+      "auth",
+      "config",
+      "critical-path"
+    ],
+    "risk_level": "Medium",
+    "demo_relevance": "High",
+    "artifacts_or_files_expected": "package.json|tsconfig.json|src/server.ts|src/config.ts|.env.example|config/*.example.json",
+    "test_notes": "Env validation unit test and health smoke",
+    "rollback_or_fallback": "Boot in fixture mode if live auth fails",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E1"
+  },
+  {
+    "ticket_key": "MVP-02",
+    "issue_type": "Story",
+    "title": "Team identity mapping query parsing and timeframe rules",
+    "summary": "Normalize user question to structured request",
+    "background_rationale": "Identity mismatch is the main failure mode",
+    "scope": "Alias config|regex parse|timezone defaults|ambiguity contract",
+    "out_of_scope": "Full NLP|multilingual support",
+    "acceptance_criteria": "Required prompts parse; these days=14d; this week=local Monday->now; ambiguity returns clarification",
+    "dependencies": [
+      "MVP-01"
+    ],
+    "priority": "P0",
+    "estimate": "2h",
+    "owner_role": "Backend / Full-stack",
+    "labels": [
+      "query",
+      "identity",
+      "timeframe",
+      "critical-path"
+    ],
+    "risk_level": "High",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "src/query/*.ts|config/team-members.example.json",
+    "test_notes": "Parser fixtures for required prompts and ambiguity",
+    "rollback_or_fallback": "Use regex-plus-alias only",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E2"
+  },
+  {
+    "ticket_key": "MVP-03",
+    "issue_type": "Story",
+    "title": "Jira Cloud adapter",
+    "summary": "Fetch assigned Jira work and recent updates",
+    "background_rationale": "Jira is authoritative for assigned work but permission-sensitive",
+    "scope": "Alias->accountId|user search|enhanced JQL|fields extraction|top-5 changelogs",
+    "out_of_scope": "Comments|worklogs|bulk sync",
+    "acceptance_criteria": "Normalized issues returned; enhanced search only; privacy/no-match handled; changelog cap enforced",
+    "dependencies": [
+      "MVP-01",
+      "MVP-02"
+    ],
+    "priority": "P0",
+    "estimate": "3h",
+    "owner_role": "Integrations",
+    "labels": [
+      "jira",
+      "integration",
+      "critical-path"
+    ],
+    "risk_level": "High",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "src/adapters/jira.ts|src/types/jira.ts|fixtures/jira/*.json",
+    "test_notes": "Mock success|no-match|cap|permission failure",
+    "rollback_or_fallback": "Skip changelog enrichment if needed",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E1"
+  },
+  {
+    "ticket_key": "MVP-04",
+    "issue_type": "Story",
+    "title": "GitHub commits and recent-repo adapter",
+    "summary": "Collect recent commits across tracked repos",
+    "background_rationale": "Bounded repo scope is the pragmatic MVP",
+    "scope": "Repo iteration|list commits by author+since|normalize|derive repo set",
+    "out_of_scope": "Global repo discovery|diff analysis",
+    "acceptance_criteria": "Commits come from configured repos only; normalized records include repo/SHA/date/message; repo set deduped",
+    "dependencies": [
+      "MVP-01",
+      "MVP-02"
+    ],
+    "priority": "P0",
+    "estimate": "2.5h",
+    "owner_role": "Integrations",
+    "labels": [
+      "github",
+      "commits",
+      "recent-repos",
+      "critical-path"
+    ],
+    "risk_level": "High",
+    "demo_relevance": "High",
+    "artifacts_or_files_expected": "src/adapters/github-commits.ts|fixtures/github/commits/*.json",
+    "test_notes": "Commit hit|no commits|inaccessible repo|identity noise",
+    "rollback_or_fallback": "Reduce repo count or derive repos from PRs",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E1"
+  },
+  {
+    "ticket_key": "MVP-05",
+    "issue_type": "Story",
+    "title": "GitHub pull-request adapter",
+    "summary": "Collect open and recent PRs across tracked repos",
+    "background_rationale": "PRs are the clearest demo artifact",
+    "scope": "Repo iteration|list PRs state=all sort=updated|author/timeframe filtering|normalize",
+    "out_of_scope": "Review comments|merge queue state",
+    "acceptance_criteria": "Open and recent PRs returned separately; client-side author filtering documented; empty results are valid",
+    "dependencies": [
+      "MVP-01",
+      "MVP-02"
+    ],
+    "priority": "P0",
+    "estimate": "2h",
+    "owner_role": "Integrations",
+    "labels": [
+      "github",
+      "prs",
+      "critical-path"
+    ],
+    "risk_level": "High",
+    "demo_relevance": "High",
+    "artifacts_or_files_expected": "src/adapters/github-prs.ts|fixtures/github/prs/*.json",
+    "test_notes": "Open PR|recent closed PR|no PRs|permission miss",
+    "rollback_or_fallback": "Show open PRs only if needed",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E1"
+  },
+  {
+    "ticket_key": "MVP-06",
+    "issue_type": "Story",
+    "title": "Activity schema orchestrator retries and redacted logging",
+    "summary": "Combine provider data into one resilient payload",
+    "background_rationale": "Demo should survive single-provider failures",
+    "scope": "Canonical schema|parallel fan-out|timeouts|retry/backoff|partial-failure flags|Pino logs",
+    "out_of_scope": "Distributed tracing|persistent cache",
+    "acceptance_criteria": "Parallel fetch works; one retry on 429/5xx; partial success still yields payload; logs redact secrets",
+    "dependencies": [
+      "MVP-03",
+      "MVP-04",
+      "MVP-05"
+    ],
+    "priority": "P0",
+    "estimate": "2.5h",
+    "owner_role": "Backend / Platform",
+    "labels": [
+      "orchestrator",
+      "error-handling",
+      "observability",
+      "critical-path"
+    ],
+    "risk_level": "High",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "src/orchestrator/activity.ts|src/types/activity.ts|src/lib/logger.ts",
+    "test_notes": "Partial failure|timeout|retry|redaction assertions",
+    "rollback_or_fallback": "Disable retries and keep single-attempt calls",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E2"
+  },
+  {
+    "ticket_key": "MVP-07",
+    "issue_type": "Story",
+    "title": "Grounded response contract and renderer",
+    "summary": "Render ActivitySummary into clear answer",
+    "background_rationale": "Answer quality matters but must stay bounded",
+    "scope": "Deterministic renderer|section contract|caveat rules|optional LLM polish from normalized facts only",
+    "out_of_scope": "Chat memory|tool loops|free-form agenting",
+    "acceptance_criteria": "Renderer works without OpenAI; output includes Overview/Jira/GitHub/Caveats; no unknown evidence mentioned",
+    "dependencies": [
+      "MVP-06"
+    ],
+    "priority": "P0",
+    "estimate": "1.5h",
+    "owner_role": "Backend / AI",
+    "labels": [
+      "response",
+      "grounding",
+      "llm-optional",
+      "critical-path"
+    ],
+    "risk_level": "Medium",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "src/render/response.ts|src/prompts/*.md|fixtures/render/*.json",
+    "test_notes": "Grounding snapshots and golden outputs",
+    "rollback_or_fallback": "Template-only mode",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E2"
+  },
+  {
+    "ticket_key": "MVP-08",
+    "issue_type": "Story",
+    "title": "Web chat UI and thin CLI fallback",
+    "summary": "Expose same flow through web and CLI",
+    "background_rationale": "Web is for judging; CLI is insurance",
+    "scope": "Static page|submit flow|loading states|CLI wrapper",
+    "out_of_scope": "React SPA|user auth|history persistence",
+    "acceptance_criteria": "Required prompts run in web UI; readable error states; CLI prints same answer body",
+    "dependencies": [
+      "MVP-06",
+      "MVP-07"
+    ],
+    "priority": "P0",
+    "estimate": "2h",
+    "owner_role": "Frontend / Full-stack",
+    "labels": [
+      "frontend",
+      "cli",
+      "demo",
+      "critical-path"
+    ],
+    "risk_level": "Medium",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "public/index.html|public/app.js|src/cli.ts",
+    "test_notes": "Manual UI walkthrough and one CLI smoke",
+    "rollback_or_fallback": "Ship web first and keep CLI minimal",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E2"
+  },
+  {
+    "ticket_key": "MVP-09",
+    "issue_type": "Task",
+    "title": "Fixtures contract tests grounding checks and smoke evals",
+    "summary": "Validate with stable fixtures and focused evals",
+    "background_rationale": "A 2-day prototype needs fast trustworthy tests",
+    "scope": "Sanitized fixtures|parser tests|adapter contracts|grounding checks|e2e smoke",
+    "out_of_scope": "Full test matrix|CI/CD",
+    "acceptance_criteria": "Required prompts plus ambiguity/no-activity/not-found/partial-failure covered; golden outputs stored; grounding failures detected",
+    "dependencies": [
+      "MVP-02",
+      "MVP-03",
+      "MVP-04",
+      "MVP-05",
+      "MVP-06",
+      "MVP-07",
+      "MVP-08"
+    ],
+    "priority": "P1",
+    "estimate": "2h",
+    "owner_role": "QA / Full-stack",
+    "labels": [
+      "tests",
+      "evals",
+      "grounding",
+      "parallel-safe"
+    ],
+    "risk_level": "Medium",
+    "demo_relevance": "High",
+    "artifacts_or_files_expected": "fixtures/*|tests/*|evals/*",
+    "test_notes": "Include at least one recorded fallback run",
+    "rollback_or_fallback": "Rehearse smoke checks manually",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E3"
+  },
+  {
+    "ticket_key": "MVP-10",
+    "issue_type": "Task",
+    "title": "README demo script fallback dataset and tracker export pack",
+    "summary": "Package the build for review and demo",
+    "background_rationale": "Reviewer experience matters nearly as much as code",
+    "scope": "Setup docs|sample env docs|recorded fallback dataset|10-minute talk track|markdown/CSV/JSON backlog exports",
+    "out_of_scope": "Cloud deploy guide|direct Jira import automation",
+    "acceptance_criteria": "Reviewer can configure in under 15 min; fallback mode answers canned queries without live APIs; ticket pack ready for manual/API recreation",
+    "dependencies": [
+      "MVP-01",
+      "MVP-08",
+      "MVP-09"
+    ],
+    "priority": "P1",
+    "estimate": "1.5h",
+    "owner_role": "PM / Presenter / Full-stack",
+    "labels": [
+      "docs",
+      "demo",
+      "tracker-export",
+      "parallel-safe"
+    ],
+    "risk_level": "Low",
+    "demo_relevance": "Critical",
+    "artifacts_or_files_expected": "README.md|planning/demo-script.md|planning/backlog.csv|planning/backlog.json|fixtures/demo/*",
+    "test_notes": "Dry-run setup and fallback rehearsal",
+    "rollback_or_fallback": "Disclose fixture mode if live APIs are unstable",
+    "suggested_status": "Ready",
+    "parent_epic_key": "MVP-E3"
+  },
+  {
+    "ticket_key": "STR-01",
+    "issue_type": "Task",
+    "title": "TTL cache and provider concurrency tuning",
+    "summary": "Add short cache and bounded fan-out",
+    "background_rationale": "Helpful for repeated demo queries not required for MVP",
+    "scope": "5-minute cache|repo concurrency cap",
+    "out_of_scope": "Distributed cache|persistence",
+    "acceptance_criteria": "Repeated queries hit cache; repo fan-out bounded; stale cache expires quickly",
+    "dependencies": [
+      "MVP-04",
+      "MVP-05",
+      "MVP-06"
+    ],
+    "priority": "P3",
+    "estimate": "1h",
+    "owner_role": "Backend / Platform",
+    "labels": [
+      "stretch",
+      "performance"
+    ],
+    "risk_level": "Low",
+    "demo_relevance": "Medium",
+    "artifacts_or_files_expected": "src/lib/cache.ts|src/lib/concurrency.ts",
+    "test_notes": "One cache-hit smoke and one concurrency-limited run",
+    "rollback_or_fallback": "Keep direct live calls",
+    "suggested_status": "Icebox",
+    "parent_epic_key": "MVP-E1"
+  },
+  {
+    "ticket_key": "STR-02",
+    "issue_type": "Story",
+    "title": "Interactive member disambiguation and repo-coverage helper",
+    "summary": "Improve ambiguous-name UX and visible repo scope",
+    "background_rationale": "Useful polish if demo data has multiple Johns",
+    "scope": "Disambiguation prompt|repo coverage panel",
+    "out_of_scope": "Full admin UI|dynamic repo discovery",
+    "acceptance_criteria": "Ambiguous names return choices; tracked repos visible from config",
+    "dependencies": [
+      "MVP-02",
+      "MVP-08"
+    ],
+    "priority": "P3",
+    "estimate": "1.5h",
+    "owner_role": "Frontend / Full-stack",
+    "labels": [
+      "stretch",
+      "ux",
+      "disambiguation"
+    ],
+    "risk_level": "Medium",
+    "demo_relevance": "Medium",
+    "artifacts_or_files_expected": "public/*|src/query/identity.ts",
+    "test_notes": "One ambiguous-user fixture",
+    "rollback_or_fallback": "Keep text-only clarification message",
+    "suggested_status": "Icebox",
+    "parent_epic_key": "MVP-E2"
+  }
+]

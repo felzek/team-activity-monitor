@@ -1,0 +1,371 @@
+{
+  "generatedAt": "2026-03-24T22:02:08.233Z",
+  "mode": "dry-run",
+  "backlogPath": "/Users/admin/autonomize/plan/backlog.json",
+  "reportPath": "/Users/admin/autonomize/plan/taiga-import-report.json",
+  "project": {},
+  "summary": {
+    "totalTickets": 15,
+    "epics": 3,
+    "stories": 9,
+    "tasks": 3
+  },
+  "operations": [
+    {
+      "sourceKey": "MVP-E1",
+      "sourceType": "Epic",
+      "taigaType": "epic",
+      "subject": "[MVP-E1] Foundation & Integrations",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-E1] Foundation & Integrations",
+        "description": "Source backlog key: MVP-E1\n\nSecure startup and provider adapters\n\nWhy\nReliability depends on trustworthy data flow\n\nIn scope\n- Config\n- auth\n- identity normalization\n- Jira/GitHub adapters\n\nOut of scope\n- OAuth multi-user\n- DB\n- background sync\n\nAcceptance criteria\n- Children complete; known user yields normalized payloads; missing config blocks startup\n\nDependencies: None\nPriority: P0\nEstimate: 8h roll-up\nOwner role: Tech Lead / Integrations\nRisk level: High\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- src/config/*\n- src/adapters/*\n- config/*.json\n\nTest notes\nValidated by child tickets and fixtures\n\nRollback / fallback\nUse fixtures or single-provider demo",
+        "tags": [
+          "epic",
+          "foundation",
+          "integrations",
+          "critical-path",
+          "priority:p0",
+          "risk:high",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-e1"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-E2",
+      "sourceType": "Epic",
+      "taigaType": "epic",
+      "subject": "[MVP-E2] Query & Experience",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-E2] Query & Experience",
+        "description": "Source backlog key: MVP-E2\n\nNatural language to grounded answer\n\nWhy\nThis is the visible AI layer\n\nIn scope\n- Parsing\n- orchestration\n- rendering\n- web UI\n- thin CLI\n\nOut of scope\n- Chat history\n- session memory\n- agent autonomy\n\nAcceptance criteria\n- End-to-end answer works; partial failures visible; web path demoable\n\nDependencies: MVP-E1\nPriority: P0\nEstimate: 7h roll-up\nOwner role: Tech Lead / Full-stack\nRisk level: High\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- src/query/*\n- src/orchestrator/*\n- src/render/*\n- public/*\n\nTest notes\nSmoke questions and grounding checks\n\nRollback / fallback\n\"Web first, CLI minimal\"",
+        "tags": [
+          "epic",
+          "experience",
+          "query",
+          "critical-path",
+          "priority:p0",
+          "risk:high",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-e2"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-E3",
+      "sourceType": "Epic",
+      "taigaType": "epic",
+      "subject": "[MVP-E3] Quality Ops & Demo",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-E3] Quality Ops & Demo",
+        "description": "Source backlog key: MVP-E3\n\nHarden for review and demo\n\nWhy\nReviewer trust depends on reliability and clarity\n\nIn scope\n- Tests\n- logs\n- docs\n- fallback data\n- tracker exports\n\nOut of scope\n- CI/CD\n- cloud deploy\n\nAcceptance criteria\n- Fixtures pass; fallback mode works; setup docs are reviewer-friendly\n\nDependencies: MVP-E1, MVP-E2\nPriority: P1\nEstimate: 4h roll-up\nOwner role: QA / PM / Presenter\nRisk level: Medium\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- README.md\n- planning/*\n- fixtures/*\n\nTest notes\nSmoke plus negative-path rehearsal\n\nRollback / fallback\nRun recorded demo path if live APIs degrade",
+        "tags": [
+          "epic",
+          "qa",
+          "demo",
+          "ops",
+          "priority:p1",
+          "risk:medium",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-e3"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-01",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-01] Bootstrap env schema and auth guardrails",
+      "parentEpicKey": "MVP-E1",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-01] Bootstrap env schema and auth guardrails",
+        "description": "Source backlog key: MVP-01\n\nCreate TS runtime and fail-fast config\n\nWhy\nPrevents lost time on bad tokens and missing scope\n\nIn scope\n- Express server\n- env validation\n- sample configs\n- auth smoke\n\nOut of scope\n- OAuth login\n- secret manager\n\nAcceptance criteria\n- Dev server starts; health OK; missing env fails clearly; sample config documented\n\nDependencies: MVP-E1\nPriority: P0\nEstimate: 1.5h\nOwner role: Platform / Integrations\nRisk level: Medium\nDemo relevance: High\nSuggested status: Ready\n\nArtifacts / files expected\n- package.json\n- tsconfig.json\n- src/server.ts\n- src/config.ts\n- .env.example\n- config/*.example.json\n\nTest notes\nEnv validation unit test and health smoke\n\nRollback / fallback\nBoot in fixture mode if live auth fails",
+        "tags": [
+          "foundation",
+          "auth",
+          "config",
+          "critical-path",
+          "priority:p0",
+          "risk:medium",
+          "demo:high",
+          "status:ready",
+          "source:mvp-01"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-02",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-02] Team identity mapping query parsing and timeframe rules",
+      "parentEpicKey": "MVP-E2",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-02] Team identity mapping query parsing and timeframe rules",
+        "description": "Source backlog key: MVP-02\n\nNormalize user question to structured request\n\nWhy\nIdentity mismatch is the main failure mode\n\nIn scope\n- Alias config\n- regex parse\n- timezone defaults\n- ambiguity contract\n\nOut of scope\n- Full NLP\n- multilingual support\n\nAcceptance criteria\n- Required prompts parse; these days=14d; this week=local Monday->now; ambiguity returns clarification\n\nDependencies: MVP-01\nPriority: P0\nEstimate: 2h\nOwner role: Backend / Full-stack\nRisk level: High\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- src/query/*.ts\n- config/team-members.example.json\n\nTest notes\nParser fixtures for required prompts and ambiguity\n\nRollback / fallback\nUse regex-plus-alias only",
+        "tags": [
+          "query",
+          "identity",
+          "timeframe",
+          "critical-path",
+          "priority:p0",
+          "risk:high",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-02"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-03",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-03] Jira Cloud adapter",
+      "parentEpicKey": "MVP-E1",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-03] Jira Cloud adapter",
+        "description": "Source backlog key: MVP-03\n\nFetch assigned Jira work and recent updates\n\nWhy\nJira is authoritative for assigned work but permission-sensitive\n\nIn scope\n- Alias->accountId\n- user search\n- enhanced JQL\n- fields extraction\n- top-5 changelogs\n\nOut of scope\n- Comments\n- worklogs\n- bulk sync\n\nAcceptance criteria\n- Normalized issues returned; enhanced search only; privacy/no-match handled; changelog cap enforced\n\nDependencies: MVP-01, MVP-02\nPriority: P0\nEstimate: 3h\nOwner role: Integrations\nRisk level: High\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- src/adapters/jira.ts\n- src/types/jira.ts\n- fixtures/jira/*.json\n\nTest notes\nMock success|no-match|cap|permission failure\n\nRollback / fallback\nSkip changelog enrichment if needed",
+        "tags": [
+          "jira",
+          "integration",
+          "critical-path",
+          "priority:p0",
+          "risk:high",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-03"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-04",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-04] GitHub commits and recent-repo adapter",
+      "parentEpicKey": "MVP-E1",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-04] GitHub commits and recent-repo adapter",
+        "description": "Source backlog key: MVP-04\n\nCollect recent commits across tracked repos\n\nWhy\nBounded repo scope is the pragmatic MVP\n\nIn scope\n- Repo iteration\n- list commits by author+since\n- normalize\n- derive repo set\n\nOut of scope\n- Global repo discovery\n- diff analysis\n\nAcceptance criteria\n- Commits come from configured repos only; normalized records include repo/SHA/date/message; repo set deduped\n\nDependencies: MVP-01, MVP-02\nPriority: P0\nEstimate: 2.5h\nOwner role: Integrations\nRisk level: High\nDemo relevance: High\nSuggested status: Ready\n\nArtifacts / files expected\n- src/adapters/github-commits.ts\n- fixtures/github/commits/*.json\n\nTest notes\nCommit hit|no commits|inaccessible repo|identity noise\n\nRollback / fallback\nReduce repo count or derive repos from PRs",
+        "tags": [
+          "github",
+          "commits",
+          "recent-repos",
+          "critical-path",
+          "priority:p0",
+          "risk:high",
+          "demo:high",
+          "status:ready",
+          "source:mvp-04"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-05",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-05] GitHub pull-request adapter",
+      "parentEpicKey": "MVP-E1",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-05] GitHub pull-request adapter",
+        "description": "Source backlog key: MVP-05\n\nCollect open and recent PRs across tracked repos\n\nWhy\nPRs are the clearest demo artifact\n\nIn scope\n- Repo iteration\n- list PRs state=all sort=updated\n- author/timeframe filtering\n- normalize\n\nOut of scope\n- Review comments\n- merge queue state\n\nAcceptance criteria\n- Open and recent PRs returned separately; client-side author filtering documented; empty results are valid\n\nDependencies: MVP-01, MVP-02\nPriority: P0\nEstimate: 2h\nOwner role: Integrations\nRisk level: High\nDemo relevance: High\nSuggested status: Ready\n\nArtifacts / files expected\n- src/adapters/github-prs.ts\n- fixtures/github/prs/*.json\n\nTest notes\nOpen PR|recent closed PR|no PRs|permission miss\n\nRollback / fallback\nShow open PRs only if needed",
+        "tags": [
+          "github",
+          "prs",
+          "critical-path",
+          "priority:p0",
+          "risk:high",
+          "demo:high",
+          "status:ready",
+          "source:mvp-05"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-06",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-06] Activity schema orchestrator retries and redacted logging",
+      "parentEpicKey": "MVP-E2",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-06] Activity schema orchestrator retries and redacted logging",
+        "description": "Source backlog key: MVP-06\n\nCombine provider data into one resilient payload\n\nWhy\nDemo should survive single-provider failures\n\nIn scope\n- Canonical schema\n- parallel fan-out\n- timeouts\n- retry/backoff\n- partial-failure flags\n- Pino logs\n\nOut of scope\n- Distributed tracing\n- persistent cache\n\nAcceptance criteria\n- Parallel fetch works; one retry on 429/5xx; partial success still yields payload; logs redact secrets\n\nDependencies: MVP-03, MVP-04, MVP-05\nPriority: P0\nEstimate: 2.5h\nOwner role: Backend / Platform\nRisk level: High\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- src/orchestrator/activity.ts\n- src/types/activity.ts\n- src/lib/logger.ts\n\nTest notes\nPartial failure|timeout|retry|redaction assertions\n\nRollback / fallback\nDisable retries and keep single-attempt calls",
+        "tags": [
+          "orchestrator",
+          "error-handling",
+          "observability",
+          "critical-path",
+          "priority:p0",
+          "risk:high",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-06"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-07",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-07] Grounded response contract and renderer",
+      "parentEpicKey": "MVP-E2",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-07] Grounded response contract and renderer",
+        "description": "Source backlog key: MVP-07\n\nRender ActivitySummary into clear answer\n\nWhy\nAnswer quality matters but must stay bounded\n\nIn scope\n- Deterministic renderer\n- section contract\n- caveat rules\n- optional LLM polish from normalized facts only\n\nOut of scope\n- Chat memory\n- tool loops\n- free-form agenting\n\nAcceptance criteria\n- Renderer works without OpenAI; output includes Overview/Jira/GitHub/Caveats; no unknown evidence mentioned\n\nDependencies: MVP-06\nPriority: P0\nEstimate: 1.5h\nOwner role: Backend / AI\nRisk level: Medium\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- src/render/response.ts\n- src/prompts/*.md\n- fixtures/render/*.json\n\nTest notes\nGrounding snapshots and golden outputs\n\nRollback / fallback\nTemplate-only mode",
+        "tags": [
+          "response",
+          "grounding",
+          "llm-optional",
+          "critical-path",
+          "priority:p0",
+          "risk:medium",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-07"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-08",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[MVP-08] Web chat UI and thin CLI fallback",
+      "parentEpicKey": "MVP-E2",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-08] Web chat UI and thin CLI fallback",
+        "description": "Source backlog key: MVP-08\n\nExpose same flow through web and CLI\n\nWhy\nWeb is for judging; CLI is insurance\n\nIn scope\n- Static page\n- submit flow\n- loading states\n- CLI wrapper\n\nOut of scope\n- React SPA\n- user auth\n- history persistence\n\nAcceptance criteria\n- Required prompts run in web UI; readable error states; CLI prints same answer body\n\nDependencies: MVP-06, MVP-07\nPriority: P0\nEstimate: 2h\nOwner role: Frontend / Full-stack\nRisk level: Medium\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- public/index.html\n- public/app.js\n- src/cli.ts\n\nTest notes\nManual UI walkthrough and one CLI smoke\n\nRollback / fallback\nShip web first and keep CLI minimal",
+        "tags": [
+          "frontend",
+          "cli",
+          "demo",
+          "critical-path",
+          "priority:p0",
+          "risk:medium",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-08"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-09",
+      "sourceType": "Task",
+      "taigaType": "task",
+      "subject": "[MVP-09] Fixtures contract tests grounding checks and smoke evals",
+      "parentEpicKey": "MVP-E3",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-09] Fixtures contract tests grounding checks and smoke evals",
+        "description": "Source backlog key: MVP-09\n\nValidate with stable fixtures and focused evals\n\nWhy\nA 2-day prototype needs fast trustworthy tests\n\nIn scope\n- Sanitized fixtures\n- parser tests\n- adapter contracts\n- grounding checks\n- e2e smoke\n\nOut of scope\n- Full test matrix\n- CI/CD\n\nAcceptance criteria\n- Required prompts plus ambiguity/no-activity/not-found/partial-failure covered; golden outputs stored; grounding failures detected\n\nDependencies: MVP-02, MVP-03, MVP-04, MVP-05, MVP-06, MVP-07, MVP-08\nPriority: P1\nEstimate: 2h\nOwner role: QA / Full-stack\nRisk level: Medium\nDemo relevance: High\nSuggested status: Ready\n\nArtifacts / files expected\n- fixtures/*\n- tests/*\n- evals/*\n\nTest notes\nInclude at least one recorded fallback run\n\nRollback / fallback\nRehearse smoke checks manually",
+        "tags": [
+          "tests",
+          "evals",
+          "grounding",
+          "parallel-safe",
+          "priority:p1",
+          "risk:medium",
+          "demo:high",
+          "status:ready",
+          "source:mvp-09"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "MVP-10",
+      "sourceType": "Task",
+      "taigaType": "task",
+      "subject": "[MVP-10] README demo script fallback dataset and tracker export pack",
+      "parentEpicKey": "MVP-E3",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[MVP-10] README demo script fallback dataset and tracker export pack",
+        "description": "Source backlog key: MVP-10\n\nPackage the build for review and demo\n\nWhy\nReviewer experience matters nearly as much as code\n\nIn scope\n- Setup docs\n- sample env docs\n- recorded fallback dataset\n- 10-minute talk track\n- markdown/CSV/JSON backlog exports\n\nOut of scope\n- Cloud deploy guide\n- direct Jira import automation\n\nAcceptance criteria\n- Reviewer can configure in under 15 min; fallback mode answers canned queries without live APIs; ticket pack ready for manual/API recreation\n\nDependencies: MVP-01, MVP-08, MVP-09\nPriority: P1\nEstimate: 1.5h\nOwner role: PM / Presenter / Full-stack\nRisk level: Low\nDemo relevance: Critical\nSuggested status: Ready\n\nArtifacts / files expected\n- README.md\n- planning/demo-script.md\n- planning/backlog.csv\n- planning/backlog.json\n- fixtures/demo/*\n\nTest notes\nDry-run setup and fallback rehearsal\n\nRollback / fallback\nDisclose fixture mode if live APIs are unstable",
+        "tags": [
+          "docs",
+          "demo",
+          "tracker-export",
+          "parallel-safe",
+          "priority:p1",
+          "risk:low",
+          "demo:critical",
+          "status:ready",
+          "source:mvp-10"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "STR-01",
+      "sourceType": "Task",
+      "taigaType": "task",
+      "subject": "[STR-01] TTL cache and provider concurrency tuning",
+      "parentEpicKey": "MVP-E1",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[STR-01] TTL cache and provider concurrency tuning",
+        "description": "Source backlog key: STR-01\n\nAdd short cache and bounded fan-out\n\nWhy\nHelpful for repeated demo queries not required for MVP\n\nIn scope\n- 5-minute cache\n- repo concurrency cap\n\nOut of scope\n- Distributed cache\n- persistence\n\nAcceptance criteria\n- Repeated queries hit cache; repo fan-out bounded; stale cache expires quickly\n\nDependencies: MVP-04, MVP-05, MVP-06\nPriority: P3\nEstimate: 1h\nOwner role: Backend / Platform\nRisk level: Low\nDemo relevance: Medium\nSuggested status: Icebox\n\nArtifacts / files expected\n- src/lib/cache.ts\n- src/lib/concurrency.ts\n\nTest notes\nOne cache-hit smoke and one concurrency-limited run\n\nRollback / fallback\nKeep direct live calls",
+        "tags": [
+          "stretch",
+          "performance",
+          "priority:p3",
+          "risk:low",
+          "demo:medium",
+          "status:icebox",
+          "source:str-01"
+        ]
+      },
+      "status": "pending"
+    },
+    {
+      "sourceKey": "STR-02",
+      "sourceType": "Story",
+      "taigaType": "userstory",
+      "subject": "[STR-02] Interactive member disambiguation and repo-coverage helper",
+      "parentEpicKey": "MVP-E2",
+      "payload": {
+        "project": "<set TAIGA_PROJECT_ID or TAIGA_PROJECT_SLUG>",
+        "subject": "[STR-02] Interactive member disambiguation and repo-coverage helper",
+        "description": "Source backlog key: STR-02\n\nImprove ambiguous-name UX and visible repo scope\n\nWhy\nUseful polish if demo data has multiple Johns\n\nIn scope\n- Disambiguation prompt\n- repo coverage panel\n\nOut of scope\n- Full admin UI\n- dynamic repo discovery\n\nAcceptance criteria\n- Ambiguous names return choices; tracked repos visible from config\n\nDependencies: MVP-02, MVP-08\nPriority: P3\nEstimate: 1.5h\nOwner role: Frontend / Full-stack\nRisk level: Medium\nDemo relevance: Medium\nSuggested status: Icebox\n\nArtifacts / files expected\n- public/*\n- src/query/identity.ts\n\nTest notes\nOne ambiguous-user fixture\n\nRollback / fallback\nKeep text-only clarification message",
+        "tags": [
+          "stretch",
+          "ux",
+          "disambiguation",
+          "priority:p3",
+          "risk:medium",
+          "demo:medium",
+          "status:icebox",
+          "source:str-02"
+        ]
+      },
+      "status": "pending"
+    }
+  ],
+  "warnings": [
+    "Dry-run mode does not call Taiga. Set the Taiga env vars and run with --create to push the backlog."
+  ],
+  "success": true
+}

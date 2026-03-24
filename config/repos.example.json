@@ -1,0 +1,5 @@
+[
+  { "owner": "acme", "repo": "team-portal" },
+  { "owner": "acme", "repo": "payments-api" },
+  { "owner": "acme", "repo": "ops-scripts" }
+]

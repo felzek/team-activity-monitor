@@ -1,0 +1,43 @@
+{
+  "accountId": "fixture-john-account-id",
+  "displayName": "John Doe",
+  "issues": [
+    {
+      "key": "OPS-17",
+      "summary": "Harden deploy rollback path",
+      "status": "In Progress",
+      "priority": "High",
+      "issueType": "Task",
+      "updated": "2026-03-23T15:20:00.000Z",
+      "url": "https://example.atlassian.net/browse/OPS-17",
+      "recentChanges": [
+        {
+          "at": "2026-03-23T15:20:00.000Z",
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress",
+          "author": "Jordan Rivera"
+        }
+      ]
+    },
+    {
+      "key": "API-44",
+      "summary": "Document Jira fallback mode",
+      "status": "In Review",
+      "priority": "Medium",
+      "issueType": "Story",
+      "updated": "2026-03-22T18:05:00.000Z",
+      "url": "https://example.atlassian.net/browse/API-44",
+      "recentChanges": [
+        {
+          "at": "2026-03-22T18:05:00.000Z",
+          "field": "status",
+          "from": "In Progress",
+          "to": "In Review",
+          "author": "John Doe"
+        }
+      ]
+    }
+  ],
+  "recentUpdateCount": 2
+}
