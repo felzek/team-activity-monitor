@@ -88,6 +88,8 @@ npm run smoke
 
 The repo now includes [render.yaml](/Users/admin/autonomize/render.yaml) for a free Render web service.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/felzek/team-activity-monitor)
+
 What that gives you:
 
 - a GitHub-connected deployment target from a private repo
