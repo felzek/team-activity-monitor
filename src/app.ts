@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 
 import express from "express";
@@ -13,9 +14,11 @@ import {
   requireAuthPage,
   requireCsrf,
   requireOrganization,
+  requireProviderConnections,
   toSessionUser,
   validateConnectorInput,
   validateInviteInput,
+  validateProviderLoginInput,
   validateProviderParam,
   validateRegistrationInput,
   verifyPassword
@@ -26,15 +29,54 @@ import type { AppDatabase } from "./db.js";
 import { AppError, isAppError } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
 import { generateGroundedResponse } from "./lib/ollama.js";
+import {
+  applyProviderAuthRuntime,
+  buildProviderAuthorizationUrl,
+  buildProviderAuthFlowState,
+  completeProviderAuthorization,
+  getProviderConnectionMode
+} from "./lib/provider-auth.js";
 import { createRateLimitMiddleware } from "./lib/rate-limit.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
-import type { OrganizationSettings, OrganizationSummary, SessionSnapshot } from "./types/auth.js";
+import type { OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery } from "./types/activity.js";
 
 function publicFile(fileName: string): string {
   return path.resolve(process.cwd(), "public", fileName);
+}
+
+function fallbackDisplayName(email: string, providedName?: string | null): string {
+  if (providedName && providedName.trim().length >= 2) {
+    return providedName.trim();
+  }
+
+  const localPart = email.split("@")[0] ?? "team-activity-user";
+  const normalized = localPart
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  if (!normalized) {
+    return "Team Activity User";
+  }
+
+  return normalized
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function fallbackProviderLogin(provider: ProviderAuthProvider, email: string): string {
+  if (provider === "github") {
+    return email
+      .split("@")[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-");
+  }
+
+  return email.toLowerCase();
 }
 
 function applySecurityHeaders(app: express.Express): void {
@@ -101,6 +143,23 @@ function filteredParsedQuery(
   };
 }
 
+function baseProviderAuthRequirement(): SessionSnapshot["providerAuth"] {
+  return {
+    mode: "demo",
+    providerModes: {
+      github: "demo",
+      jira: "demo",
+      google: "demo"
+    },
+    requiredProviders: ["github", "jira"],
+    missingProviders: ["github", "jira"],
+    allConnected: false,
+    jira: null,
+    github: null,
+    google: null
+  };
+}
+
 function buildSessionSnapshot(
   request: express.Request,
   database: AppDatabase,
@@ -117,14 +176,7 @@ function buildSessionSnapshot(
       organizations: [],
       csrfToken,
       authMode: "local",
-      providerAuth: withProviderAuthMode({
-        mode: "demo",
-        requiredProviders: ["github", "jira"],
-        missingProviders: ["github", "jira"],
-        allConnected: false,
-        jira: null,
-        github: null
-      }, config)
+      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement())
     };
   }
 
@@ -139,14 +191,7 @@ function buildSessionSnapshot(
       organizations: [],
       csrfToken,
       authMode: "local",
-      providerAuth: withProviderAuthMode({
-        mode: "demo",
-        requiredProviders: ["github", "jira"],
-        missingProviders: ["github", "jira"],
-        allConnected: false,
-        jira: null,
-        github: null
-      }, config)
+      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement())
     };
   }
 
@@ -167,23 +212,10 @@ function buildSessionSnapshot(
     organizations,
     csrfToken,
     authMode: "local",
-    providerAuth: withProviderAuthMode(database.getProviderAuthRequirement(userId), config)
-  };
-}
-
-function providerAuthMode(config: AppConfig): "demo" | "external_required" {
-  return config.useRecordedFixtures || config.appEnv !== "production"
-    ? "demo"
-    : "external_required";
-}
-
-function withProviderAuthMode(
-  providerAuth: SessionSnapshot["providerAuth"],
-  config: AppConfig
-): SessionSnapshot["providerAuth"] {
-  return {
-    ...providerAuth,
-    mode: providerAuthMode(config)
+    providerAuth: applyProviderAuthRuntime(
+      config,
+      database.getProviderAuthRequirement(userId)
+    )
   };
 }
 
@@ -208,6 +240,25 @@ function requireActiveOrganization(
 
   request.session.currentOrganizationId = organization.id;
   return organization;
+}
+
+function providerResultPath(
+  entry: "login" | "connect",
+  provider: ProviderAuthProvider,
+  status: "connected" | "error",
+  message?: string
+): string {
+  const basePath = status === "connected" ? "/app" : entry === "connect" ? "/app" : "/login";
+  const search = new URLSearchParams({
+    provider_auth: status,
+    provider
+  });
+
+  if (message) {
+    search.set("message", message);
+  }
+
+  return `${basePath}?${search.toString()}`;
 }
 
 export function createApp(config: AppConfig, logger: Logger, database: AppDatabase) {
@@ -319,26 +370,362 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
   app.get("/api/v1/auth/providers", requireAuth, (request, response) => {
     response.json({
-      providerAuth: withProviderAuthMode(
+      providerAuth: applyProviderAuthRuntime(
+        config,
         database.getProviderAuthRequirement(request.session.userId!),
-        config
       )
     });
   });
 
-  app.post("/api/v1/auth/providers/:provider/demo-connect", requireAuth, (request, response) => {
-    if (providerAuthMode(config) !== "demo") {
-      throw new AppError("Demo provider sign-in is disabled in this environment.", {
-        code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
-        statusCode: 501
-      });
-    }
-
+  app.get("/api/v1/auth/providers/:provider/start", (request, response) => {
     const provider = validateProviderParam(
       Array.isArray(request.params.provider)
         ? request.params.provider[0]
         : request.params.provider ?? ""
     );
+
+    try {
+      if (getProviderConnectionMode(config, provider) !== "oauth") {
+        throw new AppError(`${provider} OAuth is not configured in this environment.`, {
+          code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
+          statusCode: 501
+        });
+      }
+
+      const entry = request.session.userId ? "connect" : "login";
+      const flow = buildProviderAuthFlowState(
+        provider,
+        entry,
+        request.session.userId ?? null
+      );
+
+      request.session.providerAuthFlows ??= {};
+      request.session.providerAuthFlows[provider] = flow;
+      response.redirect(buildProviderAuthorizationUrl(config, flow));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Provider sign-in could not be started.";
+      response.redirect(providerResultPath(request.session.userId ? "connect" : "login", provider, "error", message));
+    }
+  });
+
+  app.post("/api/v1/auth/providers/:provider/login", async (request, response) => {
+    const provider = validateProviderParam(
+      Array.isArray(request.params.provider)
+        ? request.params.provider[0]
+        : request.params.provider ?? ""
+    );
+
+    if (getProviderConnectionMode(config, provider) !== "demo") {
+      throw new AppError(`${provider} demo sign-in is disabled in this environment.`, {
+        code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
+        statusCode: 501
+      });
+    }
+    const input = validateProviderLoginInput(request.body ?? {});
+
+    let user = database.findUserByEmail(input.email);
+    let organization: OrganizationSummary | null = null;
+    let createdAccount = false;
+
+    if (!user) {
+      const displayName = fallbackDisplayName(input.email, input.name);
+      const created = database.createUserWithOrganization({
+        name: displayName,
+        email: input.email,
+        passwordHash: await hashPassword(randomUUID()),
+        organizationName: input.organizationName ?? undefined
+      });
+
+      user = {
+        ...created.user,
+        passwordHash: ""
+      };
+      organization = created.organization;
+      createdAccount = true;
+      request.session.userId = created.user.id;
+      request.session.currentOrganizationId = created.organization.id;
+
+      database.recordAuditEvent({
+        organizationId: created.organization.id,
+        actorUserId: created.user.id,
+        eventType: "auth.registered",
+        targetType: "user",
+        targetId: created.user.id,
+        metadata: {
+          email: created.user.email,
+          provider,
+          authMethod: "demo_provider"
+        }
+      });
+    }
+
+    request.session.userId = user.id;
+    const organizations = database.listUserOrganizations(user.id);
+    organization = requireActiveOrganization(request, organizations);
+
+    database.recordAuditEvent({
+      organizationId: organization.id,
+      actorUserId: user.id,
+      eventType: "auth.signed_in",
+      targetType: "user",
+      targetId: user.id,
+      metadata: {
+        email: user.email,
+        provider,
+        authMethod: "demo_provider"
+      }
+    });
+
+    const connector = database.upsertUserProviderConnection(user.id, provider, {
+      status: "connected",
+      externalAccountId: `${provider}:${user.email}`,
+      displayName: user.name,
+      login: fallbackProviderLogin(provider, user.email),
+      email: user.email,
+      authMethod: "demo",
+      connectedAt: new Date().toISOString(),
+      metadata: {
+        mode: "demo",
+        connectedByUserId: user.id,
+        connectedFrom: "login"
+      }
+    });
+
+    database.recordAuditEvent({
+      organizationId: organization.id,
+      actorUserId: user.id,
+      eventType: "provider_auth.connected",
+      targetType: `${provider}_auth`,
+      targetId: connector.id,
+      metadata: {
+        provider,
+        authMethod: "demo",
+        connectedFrom: "login"
+      }
+    });
+
+    response.status(createdAccount ? 201 : 200).json({
+      ...buildSessionSnapshot(request, database, config),
+      createdAccount,
+      authProvider: provider
+    });
+  });
+
+  app.get("/api/v1/auth/providers/:provider/callback", async (request, response) => {
+    const provider = validateProviderParam(
+      Array.isArray(request.params.provider)
+        ? request.params.provider[0]
+        : request.params.provider ?? ""
+    );
+    const flow = request.session.providerAuthFlows?.[provider];
+    const fallbackEntry = request.session.userId ? "connect" : "login";
+    const entry = flow?.entry ?? fallbackEntry;
+
+    const finishWithError = (message: string) => {
+      if (request.session.providerAuthFlows) {
+        delete request.session.providerAuthFlows[provider];
+      }
+
+      response.redirect(providerResultPath(entry, provider, "error", message));
+    };
+
+    if (!flow) {
+      finishWithError("Provider sign-in expired before the callback completed. Start again.");
+      return;
+    }
+
+    if (request.session.providerAuthFlows) {
+      delete request.session.providerAuthFlows[provider];
+    }
+
+    const state = String(request.query.state ?? "");
+    const code = String(request.query.code ?? "");
+    const providerError = String(request.query.error ?? "");
+    const providerErrorDescription = String(request.query.error_description ?? "");
+
+    if (providerError) {
+      finishWithError(providerErrorDescription || providerError);
+      return;
+    }
+
+    if (!state || state !== flow.state) {
+      finishWithError("Provider sign-in could not be verified. Please try again.");
+      return;
+    }
+
+    if (!code) {
+      finishWithError("Provider sign-in did not return an authorization code.");
+      return;
+    }
+
+    try {
+      const identity = await completeProviderAuthorization(config, provider, code, flow);
+      const existingLink = database.findUserProviderConnectionByExternalAccount(
+        provider,
+        identity.externalAccountId
+      );
+      let user = flow.startedByUserId ? database.findUserById(flow.startedByUserId) : null;
+      let organization: OrganizationSummary | null = null;
+      let createdAccount = false;
+
+      if (flow.entry === "connect") {
+        if (!flow.startedByUserId || !user) {
+          throw new AppError("You must be signed in before linking a provider account.", {
+            code: "AUTH_SESSION_MISSING",
+            statusCode: 401
+          });
+        }
+
+        if (existingLink && existingLink.userId !== user.id) {
+          throw new AppError(
+            "That provider account is already linked to another workspace user.",
+            {
+              code: "PROVIDER_ACCOUNT_ALREADY_LINKED",
+              statusCode: 409
+            }
+          );
+        }
+
+        request.session.userId = user.id;
+        organization = requireActiveOrganization(
+          request,
+          database.listUserOrganizations(user.id)
+        );
+      } else {
+        if (existingLink) {
+          user = database.findUserById(existingLink.userId);
+        }
+
+        if (!user && identity.email) {
+          user = database.findUserByEmail(identity.email);
+        }
+
+        if (!user) {
+          if (!identity.email) {
+            throw new AppError(
+              "The provider did not return an email address, so a workspace account could not be created.",
+              {
+                code: "PROVIDER_EMAIL_REQUIRED",
+                statusCode: 400
+              }
+            );
+          }
+
+          const displayName = fallbackDisplayName(identity.email, identity.displayName);
+          const created = database.createUserWithOrganization({
+            name: displayName,
+            email: identity.email,
+            passwordHash: await hashPassword(randomUUID()),
+            organizationName: `${displayName}'s workspace`
+          });
+
+          user = created.user;
+          organization = created.organization;
+          createdAccount = true;
+          request.session.userId = created.user.id;
+          request.session.currentOrganizationId = created.organization.id;
+
+          database.recordAuditEvent({
+            organizationId: created.organization.id,
+            actorUserId: created.user.id,
+            eventType: "auth.registered",
+            targetType: "user",
+            targetId: created.user.id,
+            metadata: {
+              email: created.user.email,
+              provider,
+              authMethod: "oauth"
+            }
+          });
+        } else {
+          request.session.userId = user.id;
+          organization = requireActiveOrganization(
+            request,
+            database.listUserOrganizations(user.id)
+          );
+        }
+
+        if (!organization && user) {
+          organization = requireActiveOrganization(
+            request,
+            database.listUserOrganizations(user.id)
+          );
+        }
+
+        if (!user || !organization) {
+          throw new AppError("Provider sign-in could not be attached to a workspace user.", {
+            code: "PROVIDER_LOGIN_FAILED",
+            statusCode: 400
+          });
+        }
+
+        database.recordAuditEvent({
+          organizationId: organization.id,
+          actorUserId: user.id,
+          eventType: "auth.signed_in",
+          targetType: "user",
+          targetId: user.id,
+          metadata: {
+            email: user.email,
+            provider,
+            authMethod: "oauth",
+            createdAccount
+          }
+        });
+      }
+
+      const connector = database.upsertUserProviderConnection(user.id, provider, {
+        status: "connected",
+        externalAccountId: identity.externalAccountId,
+        displayName: identity.displayName ?? user.name,
+        login: identity.login,
+        email: identity.email ?? user.email,
+        authMethod: "oauth",
+        connectedAt: new Date().toISOString(),
+        metadata: identity.metadata
+      });
+
+      database.recordAuditEvent({
+        organizationId: organization.id,
+        actorUserId: user.id,
+        eventType: "provider_auth.connected",
+        targetType: `${provider}_auth`,
+        targetId: connector.id,
+        metadata: {
+          provider,
+          authMethod: "oauth",
+          connectedFrom: flow.entry
+        }
+      });
+
+      response.redirect(
+        providerResultPath(
+          flow.entry,
+          provider,
+          "connected",
+          createdAccount ? "Account created and provider connected." : undefined
+        )
+      );
+    } catch (error) {
+      finishWithError(
+        error instanceof Error ? error.message : "Provider sign-in could not be completed."
+      );
+    }
+  });
+
+  app.post("/api/v1/auth/providers/:provider/demo-connect", requireAuth, (request, response) => {
+    const provider = validateProviderParam(
+      Array.isArray(request.params.provider)
+        ? request.params.provider[0]
+        : request.params.provider ?? ""
+    );
+    if (getProviderConnectionMode(config, provider) !== "demo") {
+      throw new AppError("Demo provider sign-in is disabled in this environment.", {
+        code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
+        statusCode: 501
+      });
+    }
     const user = database.findUserById(request.session.userId!);
 
     if (!user) {
@@ -348,15 +735,11 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       });
     }
 
-    const fallbackLogin =
-      provider === "github"
-        ? user.email.split("@")[0].toLowerCase().replace(/[^a-z0-9-]/g, "-")
-        : user.email.toLowerCase();
     const connector = database.upsertUserProviderConnection(user.id, provider, {
       status: "connected",
       externalAccountId: `${provider}:${user.id}`,
       displayName: user.name,
-      login: fallbackLogin,
+      login: fallbackProviderLogin(provider, user.email),
       email: user.email,
       authMethod: "demo",
       connectedAt: new Date().toISOString(),
@@ -382,7 +765,10 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
     response.json({
       connector,
-      providerAuth: withProviderAuthMode(database.getProviderAuthRequirement(user.id), config)
+      providerAuth: applyProviderAuthRuntime(
+        config,
+        database.getProviderAuthRequirement(user.id)
+      )
     });
   });
 
@@ -410,7 +796,10 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
     response.json({
       connector,
-      providerAuth: withProviderAuthMode(database.getProviderAuthRequirement(userId), config)
+      providerAuth: applyProviderAuthRuntime(
+        config,
+        database.getProviderAuthRequirement(userId)
+      )
     });
   });
 
@@ -841,7 +1230,9 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   app.post(
     ["/api/query", "/api/v1/orgs/:orgId/query"],
     requireAuth,
-    requireProviderConnections(database, ["github", "jira"], providerAuthMode(config)),
+    requireProviderConnections(database, ["github", "jira"], (providerAuth) =>
+      applyProviderAuthRuntime(config, providerAuth)
+    ),
     async (request, response) => {
       const snapshot = buildSessionSnapshot(request, database, config);
       const organization =

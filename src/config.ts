@@ -13,6 +13,15 @@ const booleanString = z
   .optional()
   .transform((value) => value === "true");
 
+const scopeString = z
+  .string()
+  .transform((value) =>
+    value
+      .split(/\s+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+  );
+
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   APP_NAME: z.string().default("Team Activity Monitor"),
@@ -31,7 +40,16 @@ const envSchema = z.object({
   JIRA_BASE_URL: z.string().optional(),
   JIRA_EMAIL: z.string().optional(),
   JIRA_API_TOKEN: z.string().optional(),
+  JIRA_OAUTH_CLIENT_ID: z.string().optional(),
+  JIRA_OAUTH_CLIENT_SECRET: z.string().optional(),
+  JIRA_OAUTH_SCOPE: scopeString.default(["read:me", "read:jira-user", "offline_access"]),
   GITHUB_TOKEN: z.string().optional(),
+  GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
+  GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GITHUB_OAUTH_SCOPE: scopeString.default(["read:user", "user:email"]),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_SCOPE: scopeString.default(["openid", "email", "profile"]),
   OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434/api"),
   OLLAMA_MODEL: z.string().default("qwen2.5:7b"),
   OLLAMA_KEEP_ALIVE: z.string().default("10m"),
@@ -73,7 +91,16 @@ export interface AppConfig {
   jiraBaseUrl?: string;
   jiraEmail?: string;
   jiraApiToken?: string;
+  jiraOAuthClientId?: string;
+  jiraOAuthClientSecret?: string;
+  jiraOAuthScope: string[];
   githubToken?: string;
+  githubOAuthClientId?: string;
+  githubOAuthClientSecret?: string;
+  githubOAuthScope: string[];
+  googleOAuthClientId?: string;
+  googleOAuthClientSecret?: string;
+  googleOAuthScope: string[];
   ollamaBaseUrl: string;
   ollamaModel: string;
   ollamaKeepAlive: string;
@@ -106,9 +133,38 @@ function validateTimezone(timezone: string): void {
   }
 }
 
+function validatePairedOAuthConfig(
+  provider: string,
+  clientId?: string,
+  clientSecret?: string
+): void {
+  if (Boolean(clientId) === Boolean(clientSecret)) {
+    return;
+  }
+
+  throw new Error(
+    `${provider} OAuth must include both client ID and client secret, or neither.`
+  );
+}
+
 export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsedEnv = envSchema.parse(env);
   validateTimezone(parsedEnv.APP_TIMEZONE);
+  validatePairedOAuthConfig(
+    "GitHub",
+    parsedEnv.GITHUB_OAUTH_CLIENT_ID,
+    parsedEnv.GITHUB_OAUTH_CLIENT_SECRET
+  );
+  validatePairedOAuthConfig(
+    "Jira",
+    parsedEnv.JIRA_OAUTH_CLIENT_ID,
+    parsedEnv.JIRA_OAUTH_CLIENT_SECRET
+  );
+  validatePairedOAuthConfig(
+    "Google",
+    parsedEnv.GOOGLE_OAUTH_CLIENT_ID,
+    parsedEnv.GOOGLE_OAUTH_CLIENT_SECRET
+  );
 
   const teamMembers = readJsonFile(
     parsedEnv.TEAM_MEMBERS_CONFIG,
@@ -157,7 +213,16 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     jiraBaseUrl: parsedEnv.JIRA_BASE_URL,
     jiraEmail: parsedEnv.JIRA_EMAIL,
     jiraApiToken: parsedEnv.JIRA_API_TOKEN,
+    jiraOAuthClientId: parsedEnv.JIRA_OAUTH_CLIENT_ID,
+    jiraOAuthClientSecret: parsedEnv.JIRA_OAUTH_CLIENT_SECRET,
+    jiraOAuthScope: parsedEnv.JIRA_OAUTH_SCOPE,
     githubToken: parsedEnv.GITHUB_TOKEN,
+    githubOAuthClientId: parsedEnv.GITHUB_OAUTH_CLIENT_ID,
+    githubOAuthClientSecret: parsedEnv.GITHUB_OAUTH_CLIENT_SECRET,
+    githubOAuthScope: parsedEnv.GITHUB_OAUTH_SCOPE,
+    googleOAuthClientId: parsedEnv.GOOGLE_OAUTH_CLIENT_ID,
+    googleOAuthClientSecret: parsedEnv.GOOGLE_OAUTH_CLIENT_SECRET,
+    googleOAuthScope: parsedEnv.GOOGLE_OAUTH_SCOPE,
     ollamaBaseUrl: parsedEnv.OLLAMA_BASE_URL,
     ollamaModel: parsedEnv.OLLAMA_MODEL,
     ollamaKeepAlive: parsedEnv.OLLAMA_KEEP_ALIVE,

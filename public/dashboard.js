@@ -361,25 +361,36 @@ function providerAuthTone(connection) {
   return connection?.status === "connected" ? "success" : "warning";
 }
 
+function providerAuthModeFor(provider) {
+  return providerAuthState?.providerModes?.[provider] || "demo";
+}
+
 function renderProviderAuthCard(provider, connection, valueElement, metaElement, connectButton, disconnectButton) {
   const connected = connection?.status === "connected";
   const tone = providerAuthTone(connection);
   const label = provider === "github" ? "GitHub" : "Jira";
-  const demoMode = providerAuthState?.mode === "demo";
+  const mode = providerAuthModeFor(provider);
 
   valueElement.textContent = connected ? "Connected" : "Connection required";
   valueElement.className = `source-health-value tone-${tone}`;
   metaElement.textContent = connected
     ? `${connection.displayName || connection.login || connection.email || label} linked${connection.connectedAt ? ` · ${formatDateTime(connection.connectedAt)}` : ""}`
-    : demoMode
+    : mode === "demo"
       ? `Connect your ${label} account before running workspace queries.`
-      : `${label} OAuth must be configured in this environment before users can connect.`;
+      : mode === "oauth"
+        ? `Authorize your ${label} account before running workspace queries.`
+        : `${label} OAuth must be configured in this environment before users can connect.`;
 
   connectButton.classList.toggle("hidden", connected);
   disconnectButton.classList.toggle("hidden", !connected);
-  connectButton.disabled = !demoMode;
-  disconnectButton.disabled = !demoMode;
-  connectButton.textContent = demoMode ? `Connect ${label}` : `${label} OAuth unavailable`;
+  connectButton.disabled = mode === "unavailable";
+  disconnectButton.disabled = !connected;
+  connectButton.textContent =
+    mode === "demo"
+      ? `Connect ${label}`
+      : mode === "oauth"
+        ? `Continue with ${label}`
+        : `${label} OAuth unavailable`;
 }
 
 function setQueryAvailability(providerAuth) {
@@ -425,6 +436,26 @@ function renderProviderAuth(providerAuth) {
     disconnectJiraAuthButton
   );
   setQueryAvailability(providerAuth);
+}
+
+function applyProviderAuthStatusFromLocation() {
+  const params = new URLSearchParams(window.location.search);
+  const outcome = params.get("provider_auth");
+  const provider = params.get("provider");
+  const message = params.get("message");
+
+  if (!outcome || !provider) {
+    return;
+  }
+
+  const label = provider === "jira" ? "Jira" : "GitHub";
+  if (outcome === "connected") {
+    setBanner(message || `${label} account connected.`, "success");
+  } else if (outcome === "error") {
+    setBanner(message || `${label} sign-in could not be completed.`, "error");
+  }
+
+  window.history.replaceState({}, document.title, window.location.pathname);
 }
 
 function providerTone(providerStatus, connector) {
@@ -829,6 +860,17 @@ async function loadWorkspaceData() {
 
 async function connectProviderAuth(provider) {
   const label = provider === "github" ? "GitHub" : "Jira";
+  const mode = providerAuthModeFor(provider);
+
+  if (mode === "oauth") {
+    window.location.href = `/api/v1/auth/providers/${provider}/start`;
+    return;
+  }
+
+  if (mode === "unavailable") {
+    setBanner(`${label} OAuth is not configured in this environment.`, "error");
+    return;
+  }
 
   try {
     const payload = await api(`/api/v1/auth/providers/${provider}/demo-connect`, {
@@ -1052,6 +1094,7 @@ renderEmptyResponse(
 Promise.resolve()
   .then(loadSession)
   .then(loadWorkspaceData)
+  .then(applyProviderAuthStatusFromLocation)
   .catch((error) => {
     setBanner(error instanceof Error ? error.message : "Dashboard failed to load.", "error");
     renderEmptyResponse(

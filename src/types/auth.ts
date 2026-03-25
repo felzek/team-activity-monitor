@@ -2,8 +2,11 @@ import type { TeamMember, TrackedRepo } from "./activity.js";
 
 export type OrganizationRole = "owner" | "admin" | "member" | "support";
 export type ConnectionStatus = "connected" | "needs_attention" | "pending" | "disabled";
-export type ProviderAuthProvider = "github" | "jira";
+export type ProviderAuthProvider = "github" | "jira" | "google";
 export type ProviderAuthStatus = "connected" | "disconnected";
+export type ProviderConnectionMode = "demo" | "oauth" | "unavailable";
+export type ProviderAuthMode = "demo" | "oauth" | "mixed" | "unavailable";
+export type ProviderAuthFlowEntry = "login" | "connect";
 
 export interface PublicUser {
   id: string;
@@ -81,19 +84,30 @@ export interface UserProviderConnection {
   displayName: string | null;
   login: string | null;
   email: string | null;
-  authMethod: "demo";
+  authMethod: "demo" | "oauth";
   connectedAt: string | null;
   updatedAt: string;
   metadata: Record<string, unknown>;
 }
 
+export interface ProviderAuthFlowState {
+  provider: ProviderAuthProvider;
+  entry: ProviderAuthFlowEntry;
+  state: string;
+  startedAt: string;
+  startedByUserId: string | null;
+  codeVerifier?: string;
+}
+
 export interface ProviderAuthRequirement {
-  mode: "demo" | "external_required";
+  mode: ProviderAuthMode;
+  providerModes: Record<ProviderAuthProvider, ProviderConnectionMode>;
   requiredProviders: ProviderAuthProvider[];
   missingProviders: ProviderAuthProvider[];
   allConnected: boolean;
   jira: UserProviderConnection | null;
   github: UserProviderConnection | null;
+  google: UserProviderConnection | null;
 }
 
 export interface OrganizationSettings {

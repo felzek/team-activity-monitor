@@ -394,9 +394,68 @@ a {
   margin-top: 18px;
 }
 
+.auth-divider {
+  position: relative;
+  margin: 24px 0 18px;
+  text-align: center;
+}
+
+.auth-divider::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1px solid rgba(20, 32, 51, 0.12);
+}
+
+.auth-divider span {
+  position: relative;
+  display: inline-block;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .auth-switch a {
   color: var(--olive);
   font-weight: 700;
+}
+
+.provider-auth-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.provider-button-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.provider-button {
+  justify-content: center;
+  text-align: center;
+}
+
+.provider-button.is-selected {
+  border-color: rgba(19, 59, 99, 0.42);
+  background: rgba(228, 238, 252, 0.92);
+  box-shadow: 0 12px 24px rgba(20, 32, 51, 0.08);
+}
+
+.provider-button:disabled {
+  cursor: not-allowed;
+  transform: none;
+  opacity: 0.62;
+  box-shadow: none;
+}
+
+.provider-auth-form {
+  margin-top: 4px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(19, 59, 99, 0.12);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .info-panel {
@@ -992,5 +1051,9 @@ a {
   .history-replay {
     position: static;
     width: fit-content;
+  }
+
+  .provider-button-row {
+    grid-template-columns: 1fr;
   }
 }

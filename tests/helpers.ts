@@ -8,7 +8,9 @@ import { vi } from "vitest";
 import type { AppConfig } from "../src/config.js";
 import { loadAppConfig } from "../src/config.js";
 
-export function buildTestConfig(): AppConfig {
+export function buildTestConfig(
+  overrides: Record<string, string | undefined> = {}
+): AppConfig {
   const databasePath = path.join(os.tmpdir(), `tam-test-${randomUUID()}.db`);
 
   return loadAppConfig({
@@ -21,7 +23,8 @@ export function buildTestConfig(): AppConfig {
     DATABASE_PATH: databasePath,
     SESSION_SECRET: "test-session-secret",
     OLLAMA_BASE_URL: "http://localhost:11434/api",
-    OLLAMA_MODEL: "qwen2.5:7b"
+    OLLAMA_MODEL: "qwen2.5:7b",
+    ...overrides
   });
 }
 

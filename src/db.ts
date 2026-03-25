@@ -106,7 +106,7 @@ interface UserProviderConnectionRow {
   display_name: string | null;
   login: string | null;
   email: string | null;
-  auth_method: "demo";
+  auth_method: "demo" | "oauth";
   connected_at: string | null;
   metadata_json: string;
   updated_at: string;
@@ -862,6 +862,33 @@ export class AppDatabase {
     return row ? toUserProviderConnection(row) : null;
   }
 
+  findUserProviderConnectionByExternalAccount(
+    provider: ProviderAuthProvider,
+    externalAccountId: string
+  ): UserProviderConnection | null {
+    const row = this.connection
+      .prepare(
+        `SELECT id,
+                user_id,
+                provider,
+                status,
+                external_account_id,
+                display_name,
+                login,
+                email,
+                auth_method,
+                connected_at,
+                metadata_json,
+                updated_at
+         FROM user_provider_connections
+         WHERE provider = ?
+           AND external_account_id = ?`
+      )
+      .get(provider, externalAccountId) as UserProviderConnectionRow | undefined;
+
+    return row ? toUserProviderConnection(row) : null;
+  }
+
   upsertUserProviderConnection(
     userId: string,
     provider: ProviderAuthProvider,
@@ -871,7 +898,7 @@ export class AppDatabase {
       displayName?: string | null;
       login?: string | null;
       email?: string | null;
-      authMethod?: "demo";
+      authMethod?: "demo" | "oauth";
       connectedAt?: string | null;
       metadata?: Record<string, unknown>;
     }
@@ -968,18 +995,29 @@ export class AppDatabase {
   ): ProviderAuthRequirement {
     const jira = this.getUserProviderConnection(userId, "jira");
     const github = this.getUserProviderConnection(userId, "github");
+    const google = this.getUserProviderConnection(userId, "google");
+    const connections: Record<ProviderAuthProvider, UserProviderConnection | null> = {
+      jira,
+      github,
+      google
+    };
     const missingProviders = requiredProviders.filter((provider) => {
-      const connection = provider === "jira" ? jira : github;
-      return connection?.status !== "connected";
+      return connections[provider]?.status !== "connected";
     });
 
     return {
       mode: "demo",
+      providerModes: {
+        github: "demo",
+        jira: "demo",
+        google: "demo"
+      },
       requiredProviders,
       missingProviders,
       allConnected: missingProviders.length === 0,
       jira,
-      github
+      github,
+      google
     };
   }
 
@@ -1418,7 +1456,7 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
       display_name TEXT,
       login TEXT,
       email TEXT,
-      auth_method TEXT NOT NULL CHECK (auth_method IN ('demo')),
+      auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'oauth')),
       connected_at TEXT,
       metadata_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -1429,6 +1467,10 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
 
     CREATE INDEX IF NOT EXISTS idx_user_provider_connections_user
       ON user_provider_connections(user_id, provider);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_provider_connections_external
+      ON user_provider_connections(provider, external_account_id)
+      WHERE external_account_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS query_runs (
       id TEXT PRIMARY KEY,

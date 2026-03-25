@@ -26,8 +26,66 @@
             <input type="password" name="password" autocomplete="current-password" required />
           </label>
           <button type="submit" class="button-primary auth-button">Log in</button>
-          <p id="auth-status" class="auth-status">Ready.</p>
+          <p id="auth-status" class="auth-status" aria-live="polite">Ready.</p>
         </form>
+        <div class="auth-divider" aria-hidden="true">
+          <span>or continue with a provider</span>
+        </div>
+        <section id="provider-auth-panel" class="provider-auth-panel">
+          <div class="provider-button-row">
+            <button type="button" class="button-secondary provider-button" data-provider="github">
+              Continue with GitHub
+            </button>
+            <button type="button" class="button-secondary provider-button" data-provider="jira">
+              Continue with Jira
+            </button>
+            <button type="button" class="button-secondary provider-button" data-provider="google">
+              Continue with Google
+            </button>
+          </div>
+          <p id="provider-auth-note" class="muted-meta">
+            In this local environment, provider sign-in creates or resumes your account and connects
+            the selected provider in one step.
+          </p>
+          <form id="provider-auth-form" class="auth-form provider-auth-form hidden">
+            <input id="provider-auth-input" type="hidden" name="provider" value="github" />
+            <label>
+              <span>Work email</span>
+              <input
+                id="provider-email"
+                type="email"
+                name="email"
+                autocomplete="email"
+                placeholder="you@company.com"
+                required
+              />
+            </label>
+            <label>
+              <span>Full name</span>
+              <input
+                type="text"
+                name="name"
+                autocomplete="name"
+                placeholder="Only needed for first-time sign-in"
+              />
+            </label>
+            <label>
+              <span>Workspace name</span>
+              <input
+                type="text"
+                name="organizationName"
+                autocomplete="organization"
+                placeholder="Only needed if a workspace does not exist yet"
+              />
+            </label>
+            <button id="provider-auth-submit" type="submit" class="button-primary auth-button">
+              Continue with GitHub
+            </button>
+            <p id="provider-auth-status" class="auth-status" aria-live="polite">
+              Select a provider to start sign-in.
+            </p>
+          </form>
+        </section>
         <p class="auth-switch">
           Need an account?
           <a href="/register">Create one here</a>

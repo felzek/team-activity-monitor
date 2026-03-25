@@ -12,6 +12,7 @@ It combines Jira and GitHub activity into one grounded answer, keeps the sources
 
 - Web app plus thin CLI
 - Workspace accounts with invitations and roles
+- Per-user GitHub and Jira sign-in requirement before queries run
 - Jira and GitHub connector records
 - Query history, audit events, and background jobs
 - Local open-source response generation with Ollama
@@ -94,9 +95,12 @@ If you prefer a different local model, change `OLLAMA_MODEL` and make sure that 
 
 1. Register or log in
 2. Open the dashboard
-3. Ask a teammate question
-4. Review the structured Jira and GitHub results
-5. Inspect caveats, timestamps, source status, and saved history
+3. Connect your GitHub and Jira accounts
+   - In local fixture/dev mode without OAuth credentials, the app uses demo-connect buttons.
+   - When provider OAuth credentials are configured, the same buttons switch to real GitHub and Jira authorization redirects.
+4. Ask a teammate question
+5. Review the structured Jira and GitHub results
+6. Inspect caveats, timestamps, source status, and saved history
 
 Default local mode still uses recorded Jira/GitHub fixtures, so you can explore the product before adding live provider credentials.
 
@@ -169,9 +173,15 @@ Operational endpoints:
 Core APIs:
 
 - `GET /api/v1/auth/session`
+- `GET /api/v1/auth/providers`
+- `GET /api/v1/auth/providers/:provider/start`
+- `GET /api/v1/auth/providers/:provider/callback`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/providers/:provider/login`
+- `POST /api/v1/auth/providers/:provider/demo-connect`
+- `DELETE /api/v1/auth/providers/:provider`
 - `GET /api/v1/orgs`
 - `GET /api/v1/orgs/:orgId/query-runs`
 - `GET /api/v1/orgs/:orgId/audit-events`
@@ -189,7 +199,13 @@ The most important environment variables are:
 - `JIRA_BASE_URL`
 - `JIRA_EMAIL`
 - `JIRA_API_TOKEN`
+- `JIRA_OAUTH_CLIENT_ID`
+- `JIRA_OAUTH_CLIENT_SECRET`
+- `JIRA_OAUTH_SCOPE`
 - `GITHUB_TOKEN`
+- `GITHUB_OAUTH_CLIENT_ID`
+- `GITHUB_OAUTH_CLIENT_SECRET`
+- `GITHUB_OAUTH_SCOPE`
 - `OLLAMA_BASE_URL`
 - `OLLAMA_MODEL`
 - `OLLAMA_KEEP_ALIVE`

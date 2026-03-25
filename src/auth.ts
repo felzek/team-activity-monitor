@@ -7,6 +7,7 @@ import type { AppDatabase } from "./db.js";
 import { AppError } from "./lib/errors.js";
 import type {
   OrganizationRole,
+  ProviderAuthRequirement,
   ProviderAuthProvider,
   PublicUser
 } from "./types/auth.js";
@@ -109,7 +110,7 @@ export function validateConnectorInput(input: {
 }
 
 export function validateProviderParam(value: string): ProviderAuthProvider {
-  if (value === "github" || value === "jira") {
+  if (value === "github" || value === "jira" || value === "google") {
     return value;
   }
 
@@ -117,6 +118,40 @@ export function validateProviderParam(value: string): ProviderAuthProvider {
     code: "INVALID_PROVIDER",
     statusCode: 400
   });
+}
+
+export function validateProviderLoginInput(input: {
+  email?: string;
+  name?: string;
+  organizationName?: string;
+}): {
+  email: string;
+  name: string | null;
+  organizationName: string | null;
+} {
+  const email = input.email?.trim().toLowerCase() ?? "";
+  const name = input.name?.trim() ?? "";
+  const organizationName = input.organizationName?.trim() ?? "";
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new AppError("Enter a valid email address.", {
+      code: "INVALID_EMAIL",
+      statusCode: 400
+    });
+  }
+
+  if (name && name.length < 2) {
+    throw new AppError("Name must be at least 2 characters long when provided.", {
+      code: "INVALID_NAME",
+      statusCode: 400
+    });
+  }
+
+  return {
+    email,
+    name: name || null,
+    organizationName: organizationName || null
+  };
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -243,7 +278,9 @@ export function requireOrganization(
 export function requireProviderConnections(
   database: AppDatabase,
   providers: ProviderAuthProvider[],
-  mode: "demo" | "external_required" = "demo"
+  decorateProviderAuth: (providerAuth: ProviderAuthRequirement) => ProviderAuthRequirement = (
+    providerAuth
+  ) => providerAuth
 ) {
   return (request: Request, response: Response, next: NextFunction): void => {
     const userId = request.session.userId;
@@ -255,10 +292,9 @@ export function requireProviderConnections(
       return;
     }
 
-    const providerAuth = {
-      ...database.getProviderAuthRequirement(userId, providers),
-      mode
-    };
+    const providerAuth = decorateProviderAuth(
+      database.getProviderAuthRequirement(userId, providers)
+    );
 
     if (!providerAuth.allConnected) {
       response.status(403).json({
