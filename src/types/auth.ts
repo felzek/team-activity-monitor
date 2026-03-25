@@ -4,8 +4,8 @@ export type OrganizationRole = "owner" | "admin" | "member" | "support";
 export type ConnectionStatus = "connected" | "needs_attention" | "pending" | "disabled";
 export type ProviderAuthProvider = "github" | "jira" | "google";
 export type ProviderAuthStatus = "connected" | "disconnected";
-export type ProviderConnectionMode = "demo" | "oauth" | "unavailable";
-export type ProviderAuthMode = "demo" | "oauth" | "mixed" | "unavailable";
+export type ProviderConnectionMode = "oauth" | "unavailable";
+export type ProviderAuthMode = "oauth" | "mixed" | "unavailable";
 export type ProviderAuthFlowEntry = "login" | "connect";
 
 export interface PublicUser {
@@ -84,7 +84,7 @@ export interface UserProviderConnection {
   displayName: string | null;
   login: string | null;
   email: string | null;
-  authMethod: "demo" | "oauth";
+  authMethod: "oauth";
   connectedAt: string | null;
   updatedAt: string;
   metadata: Record<string, unknown>;

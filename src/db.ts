@@ -106,7 +106,7 @@ interface UserProviderConnectionRow {
   display_name: string | null;
   login: string | null;
   email: string | null;
-  auth_method: "demo" | "oauth";
+  auth_method: "oauth";
   connected_at: string | null;
   metadata_json: string;
   updated_at: string;
@@ -898,7 +898,7 @@ export class AppDatabase {
       displayName?: string | null;
       login?: string | null;
       email?: string | null;
-      authMethod?: "demo" | "oauth";
+      authMethod?: "oauth";
       connectedAt?: string | null;
       metadata?: Record<string, unknown>;
     }
@@ -916,7 +916,7 @@ export class AppDatabase {
         input.displayName === undefined ? existing?.displayName ?? null : input.displayName,
       login: input.login === undefined ? existing?.login ?? null : input.login,
       email: input.email === undefined ? existing?.email ?? null : input.email,
-      authMethod: input.authMethod ?? existing?.authMethod ?? "demo",
+      authMethod: input.authMethod ?? existing?.authMethod ?? "oauth",
       connectedAt:
         input.connectedAt === undefined
           ? input.status === "connected"
@@ -1006,11 +1006,11 @@ export class AppDatabase {
     });
 
     return {
-      mode: "demo",
+      mode: "unavailable",
       providerModes: {
-        github: "demo",
-        jira: "demo",
-        google: "demo"
+        github: "unavailable",
+        jira: "unavailable",
+        google: "unavailable"
       },
       requiredProviders,
       missingProviders,
@@ -1450,13 +1450,13 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
     CREATE TABLE IF NOT EXISTS user_provider_connections (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
-      provider TEXT NOT NULL CHECK (provider IN ('github', 'jira')),
+      provider TEXT NOT NULL CHECK (provider IN ('github', 'jira', 'google')),
       status TEXT NOT NULL CHECK (status IN ('connected', 'disconnected')),
       external_account_id TEXT,
       display_name TEXT,
       login TEXT,
       email TEXT,
-      auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'oauth')),
+      auth_method TEXT NOT NULL CHECK (auth_method IN ('oauth')),
       connected_at TEXT,
       metadata_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -1537,6 +1537,49 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
       ON sessions(expires_at);
   `);
+
+  const needsProviderMigration = (() => {
+    const tableInfo = connection
+      .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='user_provider_connections'`)
+      .get() as { sql: string } | undefined;
+    return tableInfo?.sql && !tableInfo.sql.includes("'google'");
+  })();
+
+  if (needsProviderMigration) {
+    connection.exec(`
+      CREATE TABLE IF NOT EXISTS user_provider_connections_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        provider TEXT NOT NULL CHECK (provider IN ('github', 'jira', 'google')),
+        status TEXT NOT NULL CHECK (status IN ('connected', 'disconnected')),
+        external_account_id TEXT,
+        display_name TEXT,
+        login TEXT,
+        email TEXT,
+        auth_method TEXT NOT NULL CHECK (auth_method IN ('oauth')),
+        connected_at TEXT,
+        metadata_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(user_id, provider),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      INSERT INTO user_provider_connections_new
+        SELECT * FROM user_provider_connections;
+
+      DROP TABLE user_provider_connections;
+
+      ALTER TABLE user_provider_connections_new RENAME TO user_provider_connections;
+
+      CREATE INDEX IF NOT EXISTS idx_user_provider_connections_user
+        ON user_provider_connections(user_id, provider);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_provider_connections_external
+        ON user_provider_connections(provider, external_account_id)
+        WHERE external_account_id IS NOT NULL;
+    `);
+  }
 
   const database = new AppDatabase(connection, {
     teamMembers: config.teamMembers,

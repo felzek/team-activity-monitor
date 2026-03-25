@@ -520,15 +520,7 @@ export function getProviderConnectionMode(
     (provider === "google" &&
       Boolean(config.googleOAuthClientId && config.googleOAuthClientSecret));
 
-  if (configured) {
-    return "oauth";
-  }
-
-  if (config.useRecordedFixtures || config.appEnv !== "production") {
-    return "demo";
-  }
-
-  return "unavailable";
+  return configured ? "oauth" : "unavailable";
 }
 
 export function getProviderModes(
@@ -551,11 +543,7 @@ export function getProviderAuthMode(config: AppConfig): ProviderAuthMode {
 
   if (uniqueModes.size === 1) {
     const [singleMode] = Array.from(uniqueModes);
-    if (singleMode === "demo" || singleMode === "oauth") {
-      return singleMode;
-    }
-
-    return "unavailable";
+    return singleMode === "oauth" ? "oauth" : "unavailable";
   }
 
   return "mixed";
