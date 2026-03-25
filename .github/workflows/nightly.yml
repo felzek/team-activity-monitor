@@ -1,9 +1,16 @@
-name: Nightly Checks
+name: Nightly Fixture Smoke
 
 on:
   schedule:
     - cron: "0 5 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   nightly:

@@ -8,12 +8,12 @@
   </head>
   <body class="dashboard-body">
     <header class="dashboard-header">
-      <div>
+      <div class="dashboard-heading">
         <p class="eyebrow">Workspace</p>
-        <h1>Enterprise Activity Control Center</h1>
+        <h1>Ask what your team is working on.</h1>
         <p class="dashboard-subhead">
-          Run grounded teammate queries, manage workspace settings, and review operational signals
-          from one place.
+          Team Activity Monitor keeps the main flow simple: ask a teammate question, review a
+          grounded Jira and GitHub answer, then inspect workspace details only when you need them.
         </p>
       </div>
       <div class="dashboard-userbar">
@@ -26,7 +26,7 @@
       </div>
     </header>
 
-    <main class="dashboard-grid enterprise-grid">
+    <main class="dashboard-grid modern-dashboard">
       <section class="dashboard-panel workspace-panel">
         <div class="panel-header">
           <div>
@@ -35,12 +35,12 @@
           </div>
           <span id="status-pill" class="status-pill">Ready</span>
         </div>
-        <div class="workspace-meta">
-          <label class="stacked-field">
+        <div class="workspace-layout">
+          <label class="stacked-field workspace-switch">
             <span class="field-label">Switch organization</span>
             <select id="org-selector" class="select-input"></select>
           </label>
-          <div class="metric-row">
+          <div class="metric-row metric-row-compact">
             <article class="metric-card">
               <span class="metric-label">Workspace slug</span>
               <strong id="org-slug">-</strong>
@@ -58,172 +58,320 @@
               <strong id="audit-count">0</strong>
             </article>
           </div>
+          <div class="source-health-grid">
+            <article class="source-health-card">
+              <span class="metric-label">Jira connector</span>
+              <strong id="workspace-jira-health">Checking...</strong>
+              <p id="workspace-jira-meta" class="muted-meta">Validating workspace connection state.</p>
+            </article>
+            <article class="source-health-card">
+              <span class="metric-label">GitHub connector</span>
+              <strong id="workspace-github-health">Checking...</strong>
+              <p id="workspace-github-meta" class="muted-meta">Validating workspace connection state.</p>
+            </article>
+          </div>
         </div>
       </section>
 
-      <section class="dashboard-panel query-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Ask a question</p>
-            <h2>What is someone working on?</h2>
+      <section class="dashboard-panel query-hero-panel">
+        <div class="query-hero-grid">
+          <div class="query-composer">
+            <div class="panel-header panel-header-stack">
+              <div>
+                <p class="eyebrow">Ask a question</p>
+                <h2>What is someone working on these days?</h2>
+                <p class="muted-meta">
+                  Ask naturally. The app parses the teammate, resolves identity, and keeps Jira
+                  assignments separate from GitHub activity.
+                </p>
+              </div>
+            </div>
+            <form id="query-form" class="dashboard-form">
+              <label for="query" class="field-label">Question</label>
+              <textarea
+                id="query"
+                name="query"
+                rows="4"
+                placeholder="What is John working on these days?"
+              >What is John working on these days?</textarea>
+              <div class="dashboard-actions">
+                <button type="submit" class="button-primary">Run query</button>
+                <button type="button" id="use-example" class="button-secondary">Rotate example</button>
+              </div>
+            </form>
+            <div class="prompt-bank">
+              <p class="field-hint">Try one of these prompts</p>
+              <div class="prompt-chip-row">
+                <button type="button" class="prompt-chip" data-prompt="What is John working on these days?">
+                  What is John working on these days?
+                </button>
+                <button type="button" class="prompt-chip" data-prompt="Show me recent activity for Sarah">
+                  Show me recent activity for Sarah
+                </button>
+                <button type="button" class="prompt-chip" data-prompt="What has Mike been working on this week?">
+                  What has Mike been working on this week?
+                </button>
+                <button type="button" class="prompt-chip" data-prompt="Show me Lisa's recent pull requests">
+                  Show me Lisa's recent pull requests
+                </button>
+              </div>
+            </div>
           </div>
+
+          <aside class="query-sidecard">
+            <p class="eyebrow">AI pipeline</p>
+            <h2>How the answer gets built</h2>
+            <ol class="pipeline-list">
+              <li>Parse the question into teammate, intent, and timeframe.</li>
+              <li>Resolve the teammate from workspace aliases before calling any APIs.</li>
+              <li>Fetch Jira and GitHub independently so partial failures stay visible.</li>
+              <li>Normalize both sources into one grounded response with caveats.</li>
+            </ol>
+            <p class="muted-meta">
+              The summary stays trustworthy because the renderer formats normalized facts instead
+              of inventing activity.
+            </p>
+          </aside>
         </div>
-        <form id="query-form" class="dashboard-form">
-          <label for="query" class="field-label">Question</label>
-          <textarea
-            id="query"
-            name="query"
-            rows="4"
-            placeholder="What is John working on these days?"
-          >What is John working on these days?</textarea>
-          <div class="dashboard-actions">
-            <button type="submit" class="button-primary">Run query</button>
-            <button type="button" id="use-example" class="button-secondary">Use another example</button>
-          </div>
-        </form>
       </section>
 
-      <section class="dashboard-panel results-panel">
+      <section class="dashboard-panel results-panel results-panel-wide">
         <div class="panel-header">
           <div>
-            <p class="eyebrow">Grounded answer</p>
-            <h2>Latest response</h2>
+            <p class="eyebrow">Latest answer</p>
+            <h2>Grounded response</h2>
           </div>
+          <p id="last-updated" class="muted-meta">No query has been run yet.</p>
         </div>
         <div id="banner" class="dashboard-banner hidden"></div>
-        <pre id="response-text" class="response-text">Run a query to generate an answer.</pre>
-      </section>
-
-      <section class="dashboard-panel members-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Workspace members</p>
-            <h2>Roles and access</h2>
+        <div id="response-shell" class="response-shell is-empty">
+          <div id="response-empty" class="response-empty">
+            <p class="eyebrow">Ready for a question</p>
+            <h3>Start with a teammate question.</h3>
+            <p>
+              The response will open with a concise AI summary, then break the evidence into Jira
+              work, GitHub activity, and caveats.
+            </p>
           </div>
-        </div>
-        <div id="members-list" class="data-list">
-          <p class="history-empty">Members will appear here.</p>
-        </div>
-      </section>
+          <div id="response-structured" class="response-structured hidden">
+            <div class="summary-hero">
+              <div class="summary-copy">
+                <p class="eyebrow">Summary</p>
+                <h3 id="summary-title">Latest activity summary</h3>
+                <p id="summary-overview" class="summary-overview">
+                  Run a query to populate the latest activity summary.
+                </p>
+              </div>
+              <div class="summary-kpi-row">
+                <article class="summary-kpi">
+                  <span class="metric-label">Jira issues</span>
+                  <strong id="summary-jira-issues">0</strong>
+                </article>
+                <article class="summary-kpi">
+                  <span class="metric-label">Recent updates</span>
+                  <strong id="summary-jira-updates">0</strong>
+                </article>
+                <article class="summary-kpi">
+                  <span class="metric-label">GitHub signals</span>
+                  <strong id="summary-github-signals">0</strong>
+                </article>
+                <article class="summary-kpi">
+                  <span class="metric-label">Recent repos</span>
+                  <strong id="summary-repos">0</strong>
+                </article>
+              </div>
+            </div>
 
-      <section class="dashboard-panel invite-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Invite workflow</p>
-            <h2>Add teammates</h2>
+            <div id="source-status-list" class="source-status-list"></div>
+
+            <div class="results-columns">
+              <section class="result-block">
+                <div class="result-block-header">
+                  <div>
+                    <p class="eyebrow">Jira</p>
+                    <h3>Assigned issues and recent updates</h3>
+                  </div>
+                </div>
+                <div id="jira-results" class="result-list"></div>
+              </section>
+
+              <section class="result-block">
+                <div class="result-block-header">
+                  <div>
+                    <p class="eyebrow">GitHub</p>
+                    <h3>Commits, pull requests, and repos</h3>
+                  </div>
+                </div>
+                <div id="github-results" class="result-list"></div>
+              </section>
+            </div>
+
+            <section class="result-block caveats-block">
+              <div class="result-block-header">
+                <div>
+                  <p class="eyebrow">Caveats</p>
+                  <h3>Confidence and source notes</h3>
+                </div>
+              </div>
+              <ul id="caveats-list" class="caveat-list"></ul>
+            </section>
+
+            <details class="raw-answer">
+              <summary>Show raw grounded answer</summary>
+              <pre id="response-text" class="response-text">Run a query to generate an answer.</pre>
+            </details>
           </div>
-        </div>
-        <form id="invite-form" class="dashboard-form compact-form">
-          <label>
-            <span class="field-label">Email</span>
-            <input id="invite-email" type="email" name="email" placeholder="teammate@example.com" required />
-          </label>
-          <label>
-            <span class="field-label">Role</span>
-            <select id="invite-role" name="role" class="select-input">
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-              <option value="support">Support</option>
-            </select>
-          </label>
-          <button type="submit" class="button-primary">Create invite</button>
-        </form>
-        <div id="invite-list" class="data-list">
-          <p class="history-empty">Recent invitations will appear here.</p>
-        </div>
-      </section>
-
-      <section class="dashboard-panel integrations-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Connectors</p>
-            <h2>Jira and GitHub configuration</h2>
-          </div>
-        </div>
-        <div class="integration-grid">
-          <form id="jira-form" class="dashboard-form compact-form connector-form">
-            <h3>Jira</h3>
-            <label>
-              <span class="field-label">Secrets Manager reference</span>
-              <input id="jira-secret-ref" type="text" placeholder="prod/tam/jira" />
-            </label>
-            <label class="toggle-row">
-              <input id="jira-enabled" type="checkbox" checked />
-              <span>Enabled for queries</span>
-            </label>
-            <button type="submit" class="button-secondary">Save Jira connector</button>
-            <p id="jira-status" class="muted-meta">Status loading...</p>
-          </form>
-
-          <form id="github-form" class="dashboard-form compact-form connector-form">
-            <h3>GitHub</h3>
-            <label>
-              <span class="field-label">Secrets Manager reference</span>
-              <input id="github-secret-ref" type="text" placeholder="prod/tam/github" />
-            </label>
-            <label class="toggle-row">
-              <input id="github-enabled" type="checkbox" checked />
-              <span>Enabled for queries</span>
-            </label>
-            <button type="submit" class="button-secondary">Save GitHub connector</button>
-            <p id="github-status" class="muted-meta">Status loading...</p>
-          </form>
-        </div>
-      </section>
-
-      <section class="dashboard-panel settings-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Workspace settings</p>
-            <h2>Team members and tracked repos</h2>
-          </div>
-        </div>
-        <form id="settings-form" class="dashboard-form">
-          <label>
-            <span class="field-label">Team members JSON</span>
-            <textarea id="team-members-json" rows="10"></textarea>
-          </label>
-          <label>
-            <span class="field-label">Tracked repos JSON</span>
-            <textarea id="tracked-repos-json" rows="8"></textarea>
-          </label>
-          <button type="submit" class="button-primary">Save workspace settings</button>
-        </form>
-      </section>
-
-      <section class="dashboard-panel history-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Saved history</p>
-            <h2>Recent queries</h2>
-          </div>
-        </div>
-        <div id="history-list" class="history-list">
-          <p class="history-empty">Workspace query history will appear here.</p>
         </div>
       </section>
 
-      <section class="dashboard-panel audit-panel">
+      <section class="dashboard-panel admin-panel">
         <div class="panel-header">
           <div>
-            <p class="eyebrow">Audit log</p>
-            <h2>Recent admin events</h2>
+            <p class="eyebrow">Workspace controls</p>
+            <h2>Setup, access, and operations</h2>
+            <p class="muted-meta">
+              These tools stay in the same app, but the core query flow stays front and center.
+            </p>
           </div>
         </div>
-        <div id="audit-list" class="data-list">
-          <p class="history-empty">Audit events will appear here.</p>
-        </div>
-      </section>
+        <div class="admin-stack">
+          <details class="admin-card" open>
+            <summary>Workspace setup</summary>
+            <div class="admin-card-content">
+              <div class="integration-grid">
+                <form id="jira-form" class="dashboard-form compact-form connector-form">
+                  <h3>Jira</h3>
+                  <label>
+                    <span class="field-label">Secrets Manager reference</span>
+                    <input id="jira-secret-ref" type="text" placeholder="prod/tam/jira" />
+                  </label>
+                  <label class="toggle-row">
+                    <input id="jira-enabled" type="checkbox" checked />
+                    <span>Enabled for queries</span>
+                  </label>
+                  <button type="submit" class="button-secondary">Save Jira connector</button>
+                  <p id="jira-status" class="muted-meta">Status loading...</p>
+                </form>
 
-      <section class="dashboard-panel jobs-panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Background jobs</p>
-            <h2>Operational queue view</h2>
-          </div>
-        </div>
-        <div id="jobs-list" class="data-list">
-          <p class="history-empty">Queued jobs will appear here.</p>
+                <form id="github-form" class="dashboard-form compact-form connector-form">
+                  <h3>GitHub</h3>
+                  <label>
+                    <span class="field-label">Secrets Manager reference</span>
+                    <input id="github-secret-ref" type="text" placeholder="prod/tam/github" />
+                  </label>
+                  <label class="toggle-row">
+                    <input id="github-enabled" type="checkbox" checked />
+                    <span>Enabled for queries</span>
+                  </label>
+                  <button type="submit" class="button-secondary">Save GitHub connector</button>
+                  <p id="github-status" class="muted-meta">Status loading...</p>
+                </form>
+              </div>
+
+              <form id="settings-form" class="dashboard-form">
+                <label>
+                  <span class="field-label">Team members JSON</span>
+                  <textarea id="team-members-json" rows="10"></textarea>
+                </label>
+                <label>
+                  <span class="field-label">Tracked repos JSON</span>
+                  <textarea id="tracked-repos-json" rows="8"></textarea>
+                </label>
+                <button type="submit" class="button-primary">Save workspace settings</button>
+              </form>
+            </div>
+          </details>
+
+          <details class="admin-card">
+            <summary>People and access</summary>
+            <div class="admin-card-content">
+              <section class="subsection-block">
+                <div class="result-block-header">
+                  <div>
+                    <p class="eyebrow">Workspace members</p>
+                    <h3>Roles and access</h3>
+                  </div>
+                </div>
+                <div id="members-list" class="data-list">
+                  <p class="history-empty">Members will appear here.</p>
+                </div>
+              </section>
+
+              <section class="subsection-block">
+                <div class="result-block-header">
+                  <div>
+                    <p class="eyebrow">Invite workflow</p>
+                    <h3>Add teammates</h3>
+                  </div>
+                </div>
+                <form id="invite-form" class="dashboard-form compact-form">
+                  <label>
+                    <span class="field-label">Email</span>
+                    <input
+                      id="invite-email"
+                      type="email"
+                      name="email"
+                      placeholder="teammate@example.com"
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span class="field-label">Role</span>
+                    <select id="invite-role" name="role" class="select-input">
+                      <option value="member">Member</option>
+                      <option value="admin">Admin</option>
+                      <option value="support">Support</option>
+                    </select>
+                  </label>
+                  <button type="submit" class="button-primary">Create invite</button>
+                </form>
+                <div id="invite-list" class="data-list">
+                  <p class="history-empty">Recent invitations will appear here.</p>
+                </div>
+              </section>
+            </div>
+          </details>
+
+          <details class="admin-card">
+            <summary>History and operations</summary>
+            <div class="admin-card-content">
+              <section class="subsection-block">
+                <div class="result-block-header">
+                  <div>
+                    <p class="eyebrow">Saved history</p>
+                    <h3>Recent queries</h3>
+                  </div>
+                </div>
+                <div id="history-list" class="history-list">
+                  <p class="history-empty">Workspace query history will appear here.</p>
+                </div>
+              </section>
+
+              <section class="subsection-block">
+                <div class="result-block-header">
+                  <div>
+                    <p class="eyebrow">Audit log</p>
+                    <h3>Recent admin events</h3>
+                  </div>
+                </div>
+                <div id="audit-list" class="data-list">
+                  <p class="history-empty">Audit events will appear here.</p>
+                </div>
+              </section>
+
+              <section class="subsection-block">
+                <div class="result-block-header">
+                  <div>
+                    <p class="eyebrow">Background jobs</p>
+                    <h3>Operational queue view</h3>
+                  </div>
+                </div>
+                <div id="jobs-list" class="data-list">
+                  <p class="history-empty">Queued jobs will appear here.</p>
+                </div>
+              </section>
+            </div>
+          </details>
         </div>
       </section>
     </main>

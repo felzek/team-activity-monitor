@@ -1,4 +1,4 @@
-name: Deploy Production
+name: Deploy ECS Production (optional)
 
 on:
   workflow_dispatch:
@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
   id-token: write
+
+concurrency:
+  group: deploy-production-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -24,3 +28,8 @@ jobs:
             --cluster "${{ vars.ECS_CLUSTER }}" \
             --service "${{ vars.ECS_PRODUCTION_SERVICE }}" \
             --force-new-deployment
+      - name: Wait for production service to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_PRODUCTION_SERVICE }}"

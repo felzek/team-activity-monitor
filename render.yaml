@@ -11,9 +11,9 @@ services:
       - key: NODE_ENV
         value: production
       - key: APP_ENV
-        value: staging
+        value: production
       - key: APP_BASE_URL
-        sync: false
+        sync: false # set this to the public Render URL after the first deploy
       - key: APP_TIMEZONE
         value: America/New_York
       - key: USE_RECORDED_FIXTURES

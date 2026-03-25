@@ -1,4 +1,4 @@
-name: Terraform
+name: Terraform Validate
 
 on:
   pull_request:
@@ -6,6 +6,13 @@ on:
       - "terraform/**"
       - ".github/workflows/infra.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
