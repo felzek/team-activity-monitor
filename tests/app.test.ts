@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
 import { createApp } from "../src/app.js";
 import { initializeDatabase } from "../src/db.js";
 import { logger } from "../src/lib/logger.js";
-import { buildTestConfig, cleanupTestConfig } from "./helpers.js";
+import { buildTestConfig, cleanupTestConfig, mockLocalModelResponse } from "./helpers.js";
 
 async function getCsrf(agent: ReturnType<typeof request.agent>) {
   const response = await agent.get("/api/v1/auth/session");
@@ -38,7 +38,26 @@ async function putWithCsrf(
   return agent.put(path).set("x-csrf-token", csrfToken).send(payload);
 }
 
+async function connectProvider(
+  agent: ReturnType<typeof request.agent>,
+  provider: "github" | "jira"
+) {
+  const csrfToken = await getCsrf(agent);
+  return agent
+    .post(`/api/v1/auth/providers/${provider}/demo-connect`)
+    .set("x-csrf-token", csrfToken)
+    .send({});
+}
+
 describe("enterprise api routes", () => {
+  beforeEach(() => {
+    mockLocalModelResponse();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   async function buildAuthenticatedAgent() {
     const config = buildTestConfig();
     const database = initializeDatabase(config);
@@ -70,13 +89,36 @@ describe("enterprise api routes", () => {
     expect(sessionResponse.body.authenticated).toBe(true);
     expect(sessionResponse.body.currentOrganization.id).toBe(organizationId);
     expect(sessionResponse.body.currentOrganization.role).toBe("owner");
+    expect(sessionResponse.body.providerAuth.allConnected).toBe(false);
+    expect(sessionResponse.body.providerAuth.missingProviders).toEqual(["github", "jira"]);
 
     database.close();
     cleanupTestConfig(config);
   });
 
-  it("returns a grounded org-scoped response for a known user", async () => {
+  it("requires both provider sign-ins before running org queries", async () => {
     const { config, database, agent, organizationId } = await buildAuthenticatedAgent();
+
+    const blockedResponse = await postWithCsrf(agent, `/api/v1/orgs/${organizationId}/query`, {
+      query: "What is John working on these days?"
+    });
+
+    expect(blockedResponse.status).toBe(403);
+    expect(blockedResponse.body.code).toBe("PROVIDER_AUTH_REQUIRED");
+    expect(blockedResponse.body.providerAuth.missingProviders).toEqual(["github", "jira"]);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("returns a grounded org-scoped response after both providers are connected", async () => {
+    const { config, database, agent, organizationId } = await buildAuthenticatedAgent();
+
+    const githubConnect = await connectProvider(agent, "github");
+    const jiraConnect = await connectProvider(agent, "jira");
+
+    expect(githubConnect.status).toBe(200);
+    expect(jiraConnect.status).toBe(200);
 
     const response = await postWithCsrf(agent, `/api/v1/orgs/${organizationId}/query`, {
       query: "What is John working on these days?"

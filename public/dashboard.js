@@ -38,6 +38,14 @@ const workspaceJiraHealth = document.getElementById("workspace-jira-health");
 const workspaceGitHubHealth = document.getElementById("workspace-github-health");
 const workspaceJiraMeta = document.getElementById("workspace-jira-meta");
 const workspaceGitHubMeta = document.getElementById("workspace-github-meta");
+const userGitHubAuth = document.getElementById("user-github-auth");
+const userJiraAuth = document.getElementById("user-jira-auth");
+const userGitHubAuthMeta = document.getElementById("user-github-auth-meta");
+const userJiraAuthMeta = document.getElementById("user-jira-auth-meta");
+const connectGitHubAuthButton = document.getElementById("connect-github-auth");
+const connectJiraAuthButton = document.getElementById("connect-jira-auth");
+const disconnectGitHubAuthButton = document.getElementById("disconnect-github-auth");
+const disconnectJiraAuthButton = document.getElementById("disconnect-jira-auth");
 const summaryTitle = document.getElementById("summary-title");
 const summaryOverview = document.getElementById("summary-overview");
 const summaryJiraIssues = document.getElementById("summary-jira-issues");
@@ -60,6 +68,7 @@ let exampleIndex = 0;
 let csrfToken = null;
 let currentOrganizationId = null;
 let organizations = [];
+let providerAuthState = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -187,7 +196,10 @@ async function api(path, options = {}) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.error || "Request failed.");
+    const error = new Error(payload.error || "Request failed.");
+    error.code = payload.code;
+    error.payload = payload;
+    throw error;
   }
 
   return payload;
@@ -343,6 +355,76 @@ function connectorSummary(connector) {
   }
 
   return "Not configured for this workspace yet.";
+}
+
+function providerAuthTone(connection) {
+  return connection?.status === "connected" ? "success" : "warning";
+}
+
+function renderProviderAuthCard(provider, connection, valueElement, metaElement, connectButton, disconnectButton) {
+  const connected = connection?.status === "connected";
+  const tone = providerAuthTone(connection);
+  const label = provider === "github" ? "GitHub" : "Jira";
+  const demoMode = providerAuthState?.mode === "demo";
+
+  valueElement.textContent = connected ? "Connected" : "Connection required";
+  valueElement.className = `source-health-value tone-${tone}`;
+  metaElement.textContent = connected
+    ? `${connection.displayName || connection.login || connection.email || label} linked${connection.connectedAt ? ` · ${formatDateTime(connection.connectedAt)}` : ""}`
+    : demoMode
+      ? `Connect your ${label} account before running workspace queries.`
+      : `${label} OAuth must be configured in this environment before users can connect.`;
+
+  connectButton.classList.toggle("hidden", connected);
+  disconnectButton.classList.toggle("hidden", !connected);
+  connectButton.disabled = !demoMode;
+  disconnectButton.disabled = !demoMode;
+  connectButton.textContent = demoMode ? `Connect ${label}` : `${label} OAuth unavailable`;
+}
+
+function setQueryAvailability(providerAuth) {
+  const allConnected = Boolean(providerAuth?.allConnected);
+  const disabled = !allConnected;
+
+  queryInput.disabled = disabled;
+  useExampleButton.disabled = disabled;
+  queryForm.querySelector('button[type="submit"]').disabled = disabled;
+  document.querySelectorAll(".prompt-chip").forEach((button) => {
+    button.disabled = disabled;
+  });
+
+  if (disabled) {
+    const missing = providerAuth?.missingProviders?.join(" and ") || "GitHub and Jira";
+    queryInput.value = "";
+    queryInput.placeholder = `Connect ${missing} before running workspace queries.`;
+  } else {
+    queryInput.placeholder = "What is John working on these days?";
+    if (!queryInput.value.trim()) {
+      queryInput.value = "What is John working on these days?";
+    }
+  }
+}
+
+function renderProviderAuth(providerAuth) {
+  providerAuthState = providerAuth;
+
+  renderProviderAuthCard(
+    "github",
+    providerAuth?.github || null,
+    userGitHubAuth,
+    userGitHubAuthMeta,
+    connectGitHubAuthButton,
+    disconnectGitHubAuthButton
+  );
+  renderProviderAuthCard(
+    "jira",
+    providerAuth?.jira || null,
+    userJiraAuth,
+    userJiraAuthMeta,
+    connectJiraAuthButton,
+    disconnectJiraAuthButton
+  );
+  setQueryAvailability(providerAuth);
 }
 
 function providerTone(providerStatus, connector) {
@@ -675,6 +757,7 @@ async function loadSession() {
     ? `Role: ${payload.currentOrganization.role}`
     : "Role unavailable";
   orgSlug.textContent = payload.currentOrganization?.slug || "-";
+  renderProviderAuth(payload.providerAuth);
   renderOrganizations();
 }
 
@@ -724,13 +807,59 @@ async function loadWorkspaceData() {
   orgRole.textContent = currentOrganization ? `Role: ${currentOrganization.role}` : "Role unavailable";
   orgSlug.textContent = currentOrganization?.slug || "-";
 
-  if (
+  if (!providerAuthState?.allConnected) {
+    const missing = providerAuthState?.missingProviders?.join(" and ") || "GitHub and Jira";
+    setStatus("Connect providers", "warning");
+    setBanner(`Connect ${missing} before running workspace queries.`, "warning");
+    if (responseShell.classList.contains("is-empty")) {
+      renderEmptyResponse(
+        "Connect GitHub and Jira first",
+        "This workspace now requires both personal provider sign-ins before you can run teammate queries."
+      );
+    }
+  } else if (
     (integrations.jira.enabled && integrations.jira.status === "needs_attention") ||
     (integrations.github.enabled && integrations.github.status === "needs_attention")
   ) {
     setStatus("Review connectors", "warning");
   } else {
     setStatus("Ready", "ready");
+  }
+}
+
+async function connectProviderAuth(provider) {
+  const label = provider === "github" ? "GitHub" : "Jira";
+
+  try {
+    const payload = await api(`/api/v1/auth/providers/${provider}/demo-connect`, {
+      method: "POST"
+    });
+
+    renderProviderAuth(payload.providerAuth);
+    setBanner(`${label} account connected.`, "success");
+    setStatus(payload.providerAuth.allConnected ? "Ready" : "Connect required", payload.providerAuth.allConnected ? "ready" : "warning");
+  } catch (error) {
+    setBanner(error instanceof Error ? error.message : `Could not connect ${label}.`, "error");
+  }
+}
+
+async function disconnectProviderAuth(provider) {
+  const label = provider === "github" ? "GitHub" : "Jira";
+
+  try {
+    const payload = await api(`/api/v1/auth/providers/${provider}`, {
+      method: "DELETE"
+    });
+
+    renderProviderAuth(payload.providerAuth);
+    renderEmptyResponse(
+      "Connect both providers to continue",
+      "Queries stay disabled until your GitHub and Jira accounts are both linked."
+    );
+    setBanner(`${label} account disconnected.`, "warning");
+    setStatus("Connect required", "warning");
+  } catch (error) {
+    setBanner(error instanceof Error ? error.message : `Could not disconnect ${label}.`, "error");
   }
 }
 
@@ -771,6 +900,9 @@ async function runQuery(event) {
 
     await loadWorkspaceData();
   } catch (error) {
+    if (error?.code === "PROVIDER_AUTH_REQUIRED" && error.payload?.providerAuth) {
+      renderProviderAuth(error.payload.providerAuth);
+    }
     responseText.textContent = "The query could not be completed.";
     renderEmptyResponse(
       "The query could not be completed",
@@ -898,6 +1030,18 @@ jiraForm.addEventListener("submit", (event) => {
 githubForm.addEventListener("submit", (event) => {
   event.preventDefault();
   void saveConnector("github");
+});
+connectGitHubAuthButton.addEventListener("click", () => {
+  void connectProviderAuth("github");
+});
+connectJiraAuthButton.addEventListener("click", () => {
+  void connectProviderAuth("jira");
+});
+disconnectGitHubAuthButton.addEventListener("click", () => {
+  void disconnectProviderAuth("github");
+});
+disconnectJiraAuthButton.addEventListener("click", () => {
+  void disconnectProviderAuth("jira");
 });
 
 renderEmptyResponse(

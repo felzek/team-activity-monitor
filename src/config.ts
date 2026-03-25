@@ -32,8 +32,9 @@ const envSchema = z.object({
   JIRA_EMAIL: z.string().optional(),
   JIRA_API_TOKEN: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default("gpt-5-mini"),
+  OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434/api"),
+  OLLAMA_MODEL: z.string().default("qwen2.5:7b"),
+  OLLAMA_KEEP_ALIVE: z.string().default("10m"),
   COGNITO_USER_POOL_ID: z.string().optional(),
   COGNITO_APP_CLIENT_ID: z.string().optional(),
   COGNITO_DOMAIN: z.string().optional()
@@ -73,8 +74,9 @@ export interface AppConfig {
   jiraEmail?: string;
   jiraApiToken?: string;
   githubToken?: string;
-  openAiApiKey?: string;
-  openAiModel: string;
+  ollamaBaseUrl: string;
+  ollamaModel: string;
+  ollamaKeepAlive: string;
   cognitoUserPoolId?: string;
   cognitoAppClientId?: string;
   cognitoDomain?: string;
@@ -156,8 +158,9 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     jiraEmail: parsedEnv.JIRA_EMAIL,
     jiraApiToken: parsedEnv.JIRA_API_TOKEN,
     githubToken: parsedEnv.GITHUB_TOKEN,
-    openAiApiKey: parsedEnv.OPENAI_API_KEY,
-    openAiModel: parsedEnv.OPENAI_MODEL,
+    ollamaBaseUrl: parsedEnv.OLLAMA_BASE_URL,
+    ollamaModel: parsedEnv.OLLAMA_MODEL,
+    ollamaKeepAlive: parsedEnv.OLLAMA_KEEP_ALIVE,
     cognitoUserPoolId: parsedEnv.COGNITO_USER_POOL_ID,
     cognitoAppClientId: parsedEnv.COGNITO_APP_CLIENT_ID,
     cognitoDomain: parsedEnv.COGNITO_DOMAIN,

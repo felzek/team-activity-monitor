@@ -16,6 +16,7 @@ import {
   toSessionUser,
   validateConnectorInput,
   validateInviteInput,
+  validateProviderParam,
   validateRegistrationInput,
   verifyPassword
 } from "./auth.js";
@@ -24,12 +25,11 @@ import { teamMemberSchema, trackedRepoSchema } from "./config.js";
 import type { AppDatabase } from "./db.js";
 import { AppError, isAppError } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
-import { maybePolishResponse } from "./lib/openai.js";
+import { generateGroundedResponse } from "./lib/ollama.js";
 import { createRateLimitMiddleware } from "./lib/rate-limit.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
-import { renderDeterministicResponse } from "./render/response.js";
 import type { OrganizationSettings, OrganizationSummary, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery } from "./types/activity.js";
 
@@ -103,7 +103,8 @@ function filteredParsedQuery(
 
 function buildSessionSnapshot(
   request: express.Request,
-  database: AppDatabase
+  database: AppDatabase,
+  config: AppConfig
 ): SessionSnapshot {
   const userId = request.session.userId;
   const csrfToken = request.session.csrfToken ?? null;
@@ -115,7 +116,15 @@ function buildSessionSnapshot(
       currentOrganization: null,
       organizations: [],
       csrfToken,
-      authMode: "local"
+      authMode: "local",
+      providerAuth: withProviderAuthMode({
+        mode: "demo",
+        requiredProviders: ["github", "jira"],
+        missingProviders: ["github", "jira"],
+        allConnected: false,
+        jira: null,
+        github: null
+      }, config)
     };
   }
 
@@ -129,7 +138,15 @@ function buildSessionSnapshot(
       currentOrganization: null,
       organizations: [],
       csrfToken,
-      authMode: "local"
+      authMode: "local",
+      providerAuth: withProviderAuthMode({
+        mode: "demo",
+        requiredProviders: ["github", "jira"],
+        missingProviders: ["github", "jira"],
+        allConnected: false,
+        jira: null,
+        github: null
+      }, config)
     };
   }
 
@@ -149,7 +166,24 @@ function buildSessionSnapshot(
     currentOrganization,
     organizations,
     csrfToken,
-    authMode: "local"
+    authMode: "local",
+    providerAuth: withProviderAuthMode(database.getProviderAuthRequirement(userId), config)
+  };
+}
+
+function providerAuthMode(config: AppConfig): "demo" | "external_required" {
+  return config.useRecordedFixtures || config.appEnv !== "production"
+    ? "demo"
+    : "external_required";
+}
+
+function withProviderAuthMode(
+  providerAuth: SessionSnapshot["providerAuth"],
+  config: AppConfig
+): SessionSnapshot["providerAuth"] {
+  return {
+    ...providerAuth,
+    mode: providerAuthMode(config)
   };
 }
 
@@ -280,7 +314,104 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   });
 
   app.get(["/api/auth/session", "/api/v1/auth/session"], (request, response) => {
-    response.json(buildSessionSnapshot(request, database));
+    response.json(buildSessionSnapshot(request, database, config));
+  });
+
+  app.get("/api/v1/auth/providers", requireAuth, (request, response) => {
+    response.json({
+      providerAuth: withProviderAuthMode(
+        database.getProviderAuthRequirement(request.session.userId!),
+        config
+      )
+    });
+  });
+
+  app.post("/api/v1/auth/providers/:provider/demo-connect", requireAuth, (request, response) => {
+    if (providerAuthMode(config) !== "demo") {
+      throw new AppError("Demo provider sign-in is disabled in this environment.", {
+        code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
+        statusCode: 501
+      });
+    }
+
+    const provider = validateProviderParam(
+      Array.isArray(request.params.provider)
+        ? request.params.provider[0]
+        : request.params.provider ?? ""
+    );
+    const user = database.findUserById(request.session.userId!);
+
+    if (!user) {
+      throw new AppError("Signed-in user could not be found.", {
+        code: "USER_NOT_FOUND",
+        statusCode: 404
+      });
+    }
+
+    const fallbackLogin =
+      provider === "github"
+        ? user.email.split("@")[0].toLowerCase().replace(/[^a-z0-9-]/g, "-")
+        : user.email.toLowerCase();
+    const connector = database.upsertUserProviderConnection(user.id, provider, {
+      status: "connected",
+      externalAccountId: `${provider}:${user.id}`,
+      displayName: user.name,
+      login: fallbackLogin,
+      email: user.email,
+      authMethod: "demo",
+      connectedAt: new Date().toISOString(),
+      metadata: {
+        mode: "demo",
+        connectedByUserId: user.id
+      }
+    });
+    const organizations = database.listUserOrganizations(user.id);
+    const organization = requireActiveOrganization(request, organizations);
+
+    database.recordAuditEvent({
+      organizationId: organization.id,
+      actorUserId: user.id,
+      eventType: "provider_auth.connected",
+      targetType: `${provider}_auth`,
+      targetId: connector.id,
+      metadata: {
+        provider,
+        authMethod: "demo"
+      }
+    });
+
+    response.json({
+      connector,
+      providerAuth: withProviderAuthMode(database.getProviderAuthRequirement(user.id), config)
+    });
+  });
+
+  app.delete("/api/v1/auth/providers/:provider", requireAuth, (request, response) => {
+    const provider = validateProviderParam(
+      Array.isArray(request.params.provider)
+        ? request.params.provider[0]
+        : request.params.provider ?? ""
+    );
+    const userId = request.session.userId!;
+    const connector = database.disconnectUserProviderConnection(userId, provider);
+    const organizations = database.listUserOrganizations(userId);
+    const organization = requireActiveOrganization(request, organizations);
+
+    database.recordAuditEvent({
+      organizationId: organization.id,
+      actorUserId: userId,
+      eventType: "provider_auth.disconnected",
+      targetType: `${provider}_auth`,
+      targetId: connector.id,
+      metadata: {
+        provider
+      }
+    });
+
+    response.json({
+      connector,
+      providerAuth: withProviderAuthMode(database.getProviderAuthRequirement(userId), config)
+    });
   });
 
   app.get("/api/v1/auth/invitations/:token", (request, response) => {
@@ -368,7 +499,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     }
 
     response.status(201).json({
-      ...buildSessionSnapshot(request, database),
+      ...buildSessionSnapshot(request, database, config),
       registeredUser: result?.user ?? null,
       createdOrganization: result?.organization ?? null
     });
@@ -411,7 +542,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       }
     });
 
-    response.json(buildSessionSnapshot(request, database));
+    response.json(buildSessionSnapshot(request, database, config));
   });
 
   app.post(["/api/auth/logout", "/api/v1/auth/logout"], (request, response) => {
@@ -451,11 +582,11 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       targetId: organization.id
     });
 
-    response.json(buildSessionSnapshot(request, database));
+    response.json(buildSessionSnapshot(request, database, config));
   });
 
   app.get("/api/v1/orgs", requireAuth, (request, response) => {
-    const snapshot = buildSessionSnapshot(request, database);
+    const snapshot = buildSessionSnapshot(request, database, config);
     response.json({
       organizations: snapshot.organizations,
       currentOrganization: snapshot.currentOrganization
@@ -662,7 +793,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     requireAuth,
     (request, response, next) => {
       try {
-        const snapshot = buildSessionSnapshot(request, database);
+        const snapshot = buildSessionSnapshot(request, database, config);
         const organization =
           routeOrganizationId(request)
             ? database.getOrganizationForUser(request.session.userId!, routeOrganizationId(request)!)
@@ -710,8 +841,9 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   app.post(
     ["/api/query", "/api/v1/orgs/:orgId/query"],
     requireAuth,
+    requireProviderConnections(database, ["github", "jira"], providerAuthMode(config)),
     async (request, response) => {
-      const snapshot = buildSessionSnapshot(request, database);
+      const snapshot = buildSessionSnapshot(request, database, config);
       const organization =
         routeOrganizationId(request)
           ? database.getOrganizationForUser(request.session.userId!, routeOrganizationId(request)!)
@@ -796,13 +928,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         );
       }
 
-      const deterministicResponse = renderDeterministicResponse(summary);
-      const responseText = await maybePolishResponse(
-        executionConfig,
-        summary,
-        deterministicResponse,
-        requestLogger
-      );
+      const responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
 
       const queryRun = database.saveQueryRun({
         organizationId: organization.id,

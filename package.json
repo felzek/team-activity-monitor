@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "tsx scripts/smoke.ts",
+    "llm:check": "tsx scripts/check-local-model.ts",
     "cli": "tsx src/cli.ts",
     "docker:build": "docker build -t team-activity-monitor:local .",
     "terraform:fmt": "terraform -chdir=terraform fmt -check -recursive",

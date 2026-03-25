@@ -5,7 +5,11 @@ import bcrypt from "bcryptjs";
 
 import type { AppDatabase } from "./db.js";
 import { AppError } from "./lib/errors.js";
-import type { OrganizationRole, PublicUser } from "./types/auth.js";
+import type {
+  OrganizationRole,
+  ProviderAuthProvider,
+  PublicUser
+} from "./types/auth.js";
 
 export function validateRegistrationInput(input: {
   name?: string;
@@ -102,6 +106,17 @@ export function validateConnectorInput(input: {
     secretRef,
     enabled
   };
+}
+
+export function validateProviderParam(value: string): ProviderAuthProvider {
+  if (value === "github" || value === "jira") {
+    return value;
+  }
+
+  throw new AppError("Unknown auth provider.", {
+    code: "INVALID_PROVIDER",
+    statusCode: 400
+  });
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -221,6 +236,39 @@ export function requireOrganization(
     }
 
     request.session.currentOrganizationId = organization.id;
+    next();
+  };
+}
+
+export function requireProviderConnections(
+  database: AppDatabase,
+  providers: ProviderAuthProvider[],
+  mode: "demo" | "external_required" = "demo"
+) {
+  return (request: Request, response: Response, next: NextFunction): void => {
+    const userId = request.session.userId;
+
+    if (!userId) {
+      response.status(401).json({
+        error: "You must be signed in to use this endpoint."
+      });
+      return;
+    }
+
+    const providerAuth = {
+      ...database.getProviderAuthRequirement(userId, providers),
+      mode
+    };
+
+    if (!providerAuth.allConnected) {
+      response.status(403).json({
+        error: `Connect ${providerAuth.missingProviders.join(" and ")} before using this endpoint.`,
+        code: "PROVIDER_AUTH_REQUIRED",
+        providerAuth
+      });
+      return;
+    }
+
     next();
   };
 }

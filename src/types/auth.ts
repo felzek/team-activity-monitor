@@ -2,6 +2,8 @@ import type { TeamMember, TrackedRepo } from "./activity.js";
 
 export type OrganizationRole = "owner" | "admin" | "member" | "support";
 export type ConnectionStatus = "connected" | "needs_attention" | "pending" | "disabled";
+export type ProviderAuthProvider = "github" | "jira";
+export type ProviderAuthStatus = "connected" | "disconnected";
 
 export interface PublicUser {
   id: string;
@@ -70,6 +72,30 @@ export interface ConnectorRecord {
   updatedAt: string;
 }
 
+export interface UserProviderConnection {
+  id: string;
+  userId: string;
+  provider: ProviderAuthProvider;
+  status: ProviderAuthStatus;
+  externalAccountId: string | null;
+  displayName: string | null;
+  login: string | null;
+  email: string | null;
+  authMethod: "demo";
+  connectedAt: string | null;
+  updatedAt: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ProviderAuthRequirement {
+  mode: "demo" | "external_required";
+  requiredProviders: ProviderAuthProvider[];
+  missingProviders: ProviderAuthProvider[];
+  allConnected: boolean;
+  jira: UserProviderConnection | null;
+  github: UserProviderConnection | null;
+}
+
 export interface OrganizationSettings {
   teamMembers: TeamMember[];
   trackedRepos: TrackedRepo[];
@@ -82,4 +108,5 @@ export interface SessionSnapshot {
   organizations: OrganizationSummary[];
   csrfToken: string | null;
   authMode: "local";
+  providerAuth: ProviderAuthRequirement;
 }

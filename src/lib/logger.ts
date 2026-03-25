@@ -11,8 +11,7 @@ export const logger = pino({
       "req.headers.authorization",
       "headers.authorization",
       "jiraApiToken",
-      "githubToken",
-      "openAiApiKey"
+      "githubToken"
     ],
     censor: "[Redacted]"
   }

@@ -25,36 +25,36 @@
         <p class="eyebrow">Operator guide</p>
         <h1>How to configure and use the application</h1>
         <p class="hero-text">
-          The local app runs with fixture mode and local auth by default. Production deployment is
-          scaffolded for AWS-managed infrastructure, but this environment remains runnable without
-          cloud credentials.
+          The app now uses a local Ollama model for response generation. Jira and GitHub can still
+          run in recorded-fixture mode, but the answer itself comes from a local open-source model
+          instead of a deterministic formatter.
         </p>
       </section>
 
       <section class="docs-grid">
         <article class="feature-card">
-          <h3>1. Create an owner account</h3>
+          <h3>1. Start Ollama locally</h3>
+          <p>Install Ollama, start the local service, and make sure the API is reachable on <code>http://localhost:11434/api</code>.</p>
+        </article>
+        <article class="feature-card">
+          <h3>2. Pull the default model</h3>
+          <p>Run <code>ollama pull qwen2.5:7b</code>, or choose another local model and point <code>OLLAMA_MODEL</code> at it.</p>
+        </article>
+        <article class="feature-card">
+          <h3>3. Verify the model path</h3>
+          <p>Run <code>npm run llm:check</code> before opening the app. That confirms the model exists and can answer a tiny health prompt.</p>
+        </article>
+        <article class="feature-card">
+          <h3>4. Create an owner account</h3>
           <p>Register from the homepage. Your first sign-up creates an organization automatically.</p>
         </article>
         <article class="feature-card">
-          <h3>2. Configure workspace settings</h3>
+          <h3>5. Configure workspace settings</h3>
           <p>Use the dashboard settings panel to define the team members and repositories the org should track.</p>
         </article>
         <article class="feature-card">
-          <h3>3. Add connector references</h3>
-          <p>Store Jira and GitHub secret references in the connector forms. Production deployment is designed for AWS Secrets Manager.</p>
-        </article>
-        <article class="feature-card">
-          <h3>4. Invite teammates</h3>
-          <p>Create invitations for members, admins, or support users. Each invite produces an auditable registration link.</p>
-        </article>
-        <article class="feature-card">
-          <h3>5. Run grounded queries</h3>
-          <p>Ask questions like “What is John working on these days?” and review the saved response in workspace history.</p>
-        </article>
-        <article class="feature-card">
-          <h3>6. Review ops signals</h3>
-          <p>Check recent audit events, background jobs, and connector status before using the tool in a demo or customer review.</p>
+          <h3>6. Run grounded queries</h3>
+          <p>Ask questions like “What is John working on these days?” and review the saved answer, source status, and caveats in the workspace.</p>
         </article>
       </section>
     </main>

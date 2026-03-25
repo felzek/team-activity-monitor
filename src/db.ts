@@ -17,7 +17,11 @@ import type {
   OrganizationRole,
   OrganizationSettings,
   OrganizationSummary,
+  ProviderAuthProvider,
+  ProviderAuthRequirement,
+  ProviderAuthStatus,
   PublicUser,
+  UserProviderConnection,
   QueryRunEntry
 } from "./types/auth.js";
 
@@ -93,6 +97,21 @@ interface BackgroundJobRow {
   updated_at: string;
 }
 
+interface UserProviderConnectionRow {
+  id: string;
+  user_id: string;
+  provider: ProviderAuthProvider;
+  status: ProviderAuthStatus;
+  external_account_id: string | null;
+  display_name: string | null;
+  login: string | null;
+  email: string | null;
+  auth_method: "demo";
+  connected_at: string | null;
+  metadata_json: string;
+  updated_at: string;
+}
+
 interface DatabaseDefaults {
   teamMembers: TeamMember[];
   trackedRepos: TrackedRepo[];
@@ -157,6 +176,23 @@ function toConnectorRecord(row: ConnectorRow): ConnectorRecord {
     status: row.status,
     lastValidatedAt: row.last_validated_at,
     lastError: row.last_error,
+    metadata: parseJson<Record<string, unknown>>(row.metadata_json, {}),
+    updatedAt: row.updated_at
+  };
+}
+
+function toUserProviderConnection(row: UserProviderConnectionRow): UserProviderConnection {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    provider: row.provider,
+    status: row.status,
+    externalAccountId: row.external_account_id,
+    displayName: row.display_name,
+    login: row.login,
+    email: row.email,
+    authMethod: row.auth_method,
+    connectedAt: row.connected_at,
     metadata: parseJson<Record<string, unknown>>(row.metadata_json, {}),
     updatedAt: row.updated_at
   };
@@ -799,6 +835,154 @@ export class AppDatabase {
     return this.upsertConnector("github_connections", organizationId, input);
   }
 
+  getUserProviderConnection(
+    userId: string,
+    provider: ProviderAuthProvider
+  ): UserProviderConnection | null {
+    const row = this.connection
+      .prepare(
+        `SELECT id,
+                user_id,
+                provider,
+                status,
+                external_account_id,
+                display_name,
+                login,
+                email,
+                auth_method,
+                connected_at,
+                metadata_json,
+                updated_at
+         FROM user_provider_connections
+         WHERE user_id = ?
+           AND provider = ?`
+      )
+      .get(userId, provider) as UserProviderConnectionRow | undefined;
+
+    return row ? toUserProviderConnection(row) : null;
+  }
+
+  upsertUserProviderConnection(
+    userId: string,
+    provider: ProviderAuthProvider,
+    input: {
+      status: ProviderAuthStatus;
+      externalAccountId?: string | null;
+      displayName?: string | null;
+      login?: string | null;
+      email?: string | null;
+      authMethod?: "demo";
+      connectedAt?: string | null;
+      metadata?: Record<string, unknown>;
+    }
+  ): UserProviderConnection {
+    const existing = this.getUserProviderConnection(userId, provider);
+    const now = new Date().toISOString();
+    const next = {
+      id: existing?.id ?? randomUUID(),
+      status: input.status,
+      externalAccountId:
+        input.externalAccountId === undefined
+          ? existing?.externalAccountId ?? null
+          : input.externalAccountId,
+      displayName:
+        input.displayName === undefined ? existing?.displayName ?? null : input.displayName,
+      login: input.login === undefined ? existing?.login ?? null : input.login,
+      email: input.email === undefined ? existing?.email ?? null : input.email,
+      authMethod: input.authMethod ?? existing?.authMethod ?? "demo",
+      connectedAt:
+        input.connectedAt === undefined
+          ? input.status === "connected"
+            ? existing?.connectedAt ?? now
+            : null
+          : input.connectedAt,
+      metadata: input.metadata ?? existing?.metadata ?? {}
+    };
+
+    this.connection
+      .prepare(
+        `INSERT INTO user_provider_connections (
+          id,
+          user_id,
+          provider,
+          status,
+          external_account_id,
+          display_name,
+          login,
+          email,
+          auth_method,
+          connected_at,
+          metadata_json,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, provider) DO UPDATE SET
+          status = excluded.status,
+          external_account_id = excluded.external_account_id,
+          display_name = excluded.display_name,
+          login = excluded.login,
+          email = excluded.email,
+          auth_method = excluded.auth_method,
+          connected_at = excluded.connected_at,
+          metadata_json = excluded.metadata_json,
+          updated_at = excluded.updated_at`
+      )
+      .run(
+        next.id,
+        userId,
+        provider,
+        next.status,
+        next.externalAccountId,
+        next.displayName,
+        next.login,
+        next.email,
+        next.authMethod,
+        next.connectedAt,
+        JSON.stringify(next.metadata),
+        now,
+        now
+      );
+
+    return this.getUserProviderConnection(userId, provider)!;
+  }
+
+  disconnectUserProviderConnection(
+    userId: string,
+    provider: ProviderAuthProvider
+  ): UserProviderConnection {
+    return this.upsertUserProviderConnection(userId, provider, {
+      status: "disconnected",
+      externalAccountId: null,
+      displayName: null,
+      login: null,
+      email: null,
+      connectedAt: null,
+      metadata: {}
+    });
+  }
+
+  getProviderAuthRequirement(
+    userId: string,
+    requiredProviders: ProviderAuthProvider[] = ["github", "jira"]
+  ): ProviderAuthRequirement {
+    const jira = this.getUserProviderConnection(userId, "jira");
+    const github = this.getUserProviderConnection(userId, "github");
+    const missingProviders = requiredProviders.filter((provider) => {
+      const connection = provider === "jira" ? jira : github;
+      return connection?.status !== "connected";
+    });
+
+    return {
+      mode: "demo",
+      requiredProviders,
+      missingProviders,
+      allConnected: missingProviders.length === 0,
+      jira,
+      github
+    };
+  }
+
   createInvitation(input: {
     organizationId: string;
     email: string;
@@ -1224,6 +1408,27 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS user_provider_connections (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('github', 'jira')),
+      status TEXT NOT NULL CHECK (status IN ('connected', 'disconnected')),
+      external_account_id TEXT,
+      display_name TEXT,
+      login TEXT,
+      email TEXT,
+      auth_method TEXT NOT NULL CHECK (auth_method IN ('demo')),
+      connected_at TEXT,
+      metadata_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, provider),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_provider_connections_user
+      ON user_provider_connections(user_id, provider);
 
     CREATE TABLE IF NOT EXISTS query_runs (
       id TEXT PRIMARY KEY,

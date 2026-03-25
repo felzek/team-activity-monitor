@@ -499,6 +499,16 @@ a {
   flex-wrap: wrap;
 }
 
+.inline-actions {
+  margin-top: 8px;
+}
+
+.subtle-button {
+  background: rgba(20, 32, 51, 0.04);
+  border-color: rgba(20, 32, 51, 0.08);
+  box-shadow: none;
+}
+
 .dashboard-banner {
   margin-bottom: 14px;
   padding: 12px 14px;

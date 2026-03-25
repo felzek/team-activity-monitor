@@ -28,5 +28,9 @@ services:
         value: /tmp/team-activity-monitor.db
       - key: SESSION_SECRET
         generateValue: true
-      - key: OPENAI_MODEL
-        value: gpt-5-mini
+      - key: OLLAMA_BASE_URL
+        sync: false # set this only if Render can reach your Ollama host
+      - key: OLLAMA_MODEL
+        value: qwen2.5:7b
+      - key: OLLAMA_KEEP_ALIVE
+        value: 10m

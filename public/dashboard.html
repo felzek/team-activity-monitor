@@ -135,6 +135,38 @@
         </div>
       </section>
 
+      <section class="dashboard-panel access-panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Required personal auth</p>
+            <h2>Connect both providers before querying</h2>
+            <p class="muted-meta">
+              Each signed-in user must link GitHub and Jira before the workspace query API will run.
+            </p>
+          </div>
+        </div>
+        <div class="source-health-grid">
+          <article class="source-health-card">
+            <span class="metric-label">GitHub sign-in</span>
+            <strong id="user-github-auth">Checking...</strong>
+            <p id="user-github-auth-meta" class="muted-meta">Loading provider auth state.</p>
+            <div class="dashboard-actions inline-actions">
+              <button id="connect-github-auth" type="button" class="button-secondary">Connect GitHub</button>
+              <button id="disconnect-github-auth" type="button" class="button-secondary subtle-button hidden">Disconnect</button>
+            </div>
+          </article>
+          <article class="source-health-card">
+            <span class="metric-label">Jira sign-in</span>
+            <strong id="user-jira-auth">Checking...</strong>
+            <p id="user-jira-auth-meta" class="muted-meta">Loading provider auth state.</p>
+            <div class="dashboard-actions inline-actions">
+              <button id="connect-jira-auth" type="button" class="button-secondary">Connect Jira</button>
+              <button id="disconnect-jira-auth" type="button" class="button-secondary subtle-button hidden">Disconnect</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="dashboard-panel results-panel results-panel-wide">
         <div class="panel-header">
           <div>
