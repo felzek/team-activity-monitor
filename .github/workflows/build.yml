@@ -64,7 +64,7 @@ jobs:
           curl -fsS http://127.0.0.1:3000/health/ready
       - name: Configure AWS credentials
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ECR_REPOSITORY != '' && secrets.AWS_DEPLOY_ROLE_ARN != '' }}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
