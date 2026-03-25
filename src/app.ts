@@ -43,8 +43,10 @@ import { parseQuery } from "./query/parser.js";
 import type { OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery } from "./types/activity.js";
 
-function publicFile(fileName: string): string {
-  return path.resolve(process.cwd(), "public", fileName);
+const PUBLIC_DIR = path.resolve(process.cwd(), "public");
+
+function sendPublicFile(response: express.Response, fileName: string): void {
+  response.sendFile(fileName, { root: PUBLIC_DIR });
 }
 
 function fallbackDisplayName(email: string, providedName?: string | null): string {
@@ -294,31 +296,31 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   app.use("/api", requireCsrf);
 
   app.get("/", (_request, response) => {
-    response.sendFile(publicFile("index.html"));
+    sendPublicFile(response, "index.html");
   });
 
   app.get("/login", redirectAuthenticatedPage, (_request, response) => {
-    response.sendFile(publicFile("login.html"));
+    sendPublicFile(response, "login.html");
   });
 
   app.get("/register", redirectAuthenticatedPage, (_request, response) => {
-    response.sendFile(publicFile("register.html"));
+    sendPublicFile(response, "register.html");
   });
 
   app.get("/app", requireAuthPage, (_request, response) => {
-    response.sendFile(publicFile("dashboard.html"));
+    sendPublicFile(response, "dashboard.html");
   });
 
   app.get("/docs", (_request, response) => {
-    response.sendFile(publicFile("docs.html"));
+    sendPublicFile(response, "docs.html");
   });
 
   app.get("/security", (_request, response) => {
-    response.sendFile(publicFile("security.html"));
+    sendPublicFile(response, "security.html");
   });
 
   app.get("/status", (_request, response) => {
-    response.sendFile(publicFile("status.html"));
+    sendPublicFile(response, "status.html");
   });
 
   app.get(["/api/health", "/health/live"], (_request, response) => {
