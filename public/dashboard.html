@@ -81,6 +81,7 @@
               </div>
             </article>
           </div>
+
         </div>
       </section>
 
@@ -127,6 +128,7 @@
                 </button>
               </div>
             </div>
+
           </div>
 
           <aside class="query-sidecard response-sidecard">
@@ -216,7 +218,96 @@
         </div>
       </section>
 
+      <section class="dashboard-panel llm-panel view-workspace">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">LLM API Keys</p>
+            <h2>Connect a model provider</h2>
+          </div>
+        </div>
+        <p class="muted-meta" style="margin: 0 0 12px;">Add an API key for a closed-source LLM to enhance query responses. Keys are encrypted at rest.</p>
+        <div class="llm-keys-row" id="llm-keys-grid">
+          <article class="llm-key-card" data-llm="openai">
+            <span class="metric-label">OpenAI</span>
+            <strong id="llm-openai-status">Not connected</strong>
+            <p id="llm-openai-meta" class="muted-meta">GPT models</p>
+            <div class="dashboard-actions inline-actions">
+              <button id="llm-openai-connect" type="button" class="button-secondary">Add key</button>
+              <button id="llm-openai-disconnect" type="button" class="button-secondary subtle-button hidden">Remove</button>
+            </div>
+          </article>
+          <article class="llm-key-card" data-llm="gemini">
+            <span class="metric-label">Google Gemini</span>
+            <strong id="llm-gemini-status">Not connected</strong>
+            <p id="llm-gemini-meta" class="muted-meta">Gemini models</p>
+            <div class="dashboard-actions inline-actions">
+              <button id="llm-gemini-connect" type="button" class="button-secondary">Add key</button>
+              <button id="llm-gemini-disconnect" type="button" class="button-secondary subtle-button hidden">Remove</button>
+            </div>
+          </article>
+          <article class="llm-key-card" data-llm="claude">
+            <span class="metric-label">Anthropic Claude</span>
+            <strong id="llm-claude-status">Not connected</strong>
+            <p id="llm-claude-meta" class="muted-meta">Claude models</p>
+            <div class="dashboard-actions inline-actions">
+              <button id="llm-claude-connect" type="button" class="button-secondary">Add key</button>
+              <button id="llm-claude-disconnect" type="button" class="button-secondary subtle-button hidden">Remove</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <!-- Settings view -->
+      <section class="dashboard-panel settings-section view-settings">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">LLM providers</p>
+            <h2>Manage API keys</h2>
+          </div>
+        </div>
+        <div class="admin-card-content">
+          <p class="muted-meta">Add, update, or remove API keys for closed-source LLM providers. Keys are encrypted with AES-256-GCM before being stored.</p>
+          <div class="integration-grid" id="llm-settings-grid">
+            <div class="dashboard-form compact-form connector-form" data-llm-settings="openai">
+              <h3>OpenAI</h3>
+              <label>
+                <span class="field-label">API key</span>
+                <input id="llm-openai-key-input" type="password" placeholder="sk-..." autocomplete="off" />
+              </label>
+              <p id="llm-openai-settings-status" class="muted-meta">No key saved.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="llm-openai-save" type="button" class="button-secondary">Save key</button>
+                <button id="llm-openai-remove" type="button" class="button-secondary subtle-button hidden">Remove key</button>
+              </div>
+            </div>
+            <div class="dashboard-form compact-form connector-form" data-llm-settings="gemini">
+              <h3>Google Gemini</h3>
+              <label>
+                <span class="field-label">API key</span>
+                <input id="llm-gemini-key-input" type="password" placeholder="AIza..." autocomplete="off" />
+              </label>
+              <p id="llm-gemini-settings-status" class="muted-meta">No key saved.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="llm-gemini-save" type="button" class="button-secondary">Save key</button>
+                <button id="llm-gemini-remove" type="button" class="button-secondary subtle-button hidden">Remove key</button>
+              </div>
+            </div>
+            <div class="dashboard-form compact-form connector-form" data-llm-settings="claude">
+              <h3>Anthropic Claude</h3>
+              <label>
+                <span class="field-label">API key</span>
+                <input id="llm-claude-key-input" type="password" placeholder="sk-ant-..." autocomplete="off" />
+              </label>
+              <p id="llm-claude-settings-status" class="muted-meta">No key saved.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="llm-claude-save" type="button" class="button-secondary">Save key</button>
+                <button id="llm-claude-remove" type="button" class="button-secondary subtle-button hidden">Remove key</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="dashboard-panel settings-section view-settings">
         <div class="panel-header">
           <div>

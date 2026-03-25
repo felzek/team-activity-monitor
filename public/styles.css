@@ -925,6 +925,60 @@ a {
   font-size: 0.92rem;
 }
 
+.llm-panel {
+  grid-column: 1 / -1;
+}
+
+.llm-keys-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.llm-key-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.llm-key-card .metric-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.llm-key-card strong {
+  font-size: 0.92rem;
+}
+
+.llm-key-card .muted-meta {
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.llm-key-card .inline-actions {
+  margin-top: 6px;
+  gap: 6px;
+}
+
+.llm-key-card .button-secondary {
+  font-size: 0.82rem;
+  padding: 6px 10px;
+}
+
+@media (max-width: 900px) {
+  .llm-keys-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .pipeline-list {
   margin: 0;
   padding-left: 18px;

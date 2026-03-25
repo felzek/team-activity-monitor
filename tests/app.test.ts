@@ -145,6 +145,14 @@ async function putWithCsrf(
   return agent.put(path).set("x-csrf-token", csrfToken).send(payload);
 }
 
+async function deleteWithCsrf(
+  agent: ReturnType<typeof request.agent>,
+  path: string
+) {
+  const csrfToken = await getCsrf(agent);
+  return agent.delete(path).set("x-csrf-token", csrfToken);
+}
+
 async function connectProviderViaOAuth(
   agent: ReturnType<typeof request.agent>,
   provider: "github" | "jira" | "google",
@@ -560,6 +568,102 @@ describe("enterprise api routes", () => {
     expect(settingsResponse.status).toBe(200);
     expect(settingsResponse.body.teamMembers.length).toBe(1);
     expect(settingsResponse.body.trackedRepos.length).toBe(1);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("saves, lists, and removes LLM provider API keys", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const saveResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: "sk-test-1234567890abcdef"
+    });
+    expect(saveResponse.status).toBe(200);
+    expect(saveResponse.body.key.provider).toBe("openai");
+    expect(saveResponse.body.key.maskedKey).toContain("••••");
+    expect(saveResponse.body.llmProviderKeys.length).toBe(1);
+
+    const listResponse = await agent.get("/api/v1/auth/llm-keys");
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.items.length).toBe(1);
+    expect(listResponse.body.items[0].provider).toBe("openai");
+
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+    expect(sessionResponse.body.llmProviderKeys.length).toBe(1);
+    expect(sessionResponse.body.llmProviderKeys[0].provider).toBe("openai");
+
+    const updateResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: "sk-updated-key-9876543210xyz"
+    });
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.llmProviderKeys.length).toBe(1);
+
+    const deleteResponse = await deleteWithCsrf(agent, "/api/v1/auth/llm-keys/openai");
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body.removed).toBe(true);
+    expect(deleteResponse.body.llmProviderKeys.length).toBe(0);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("supports multiple LLM providers per user", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", { apiKey: "sk-openai-test12345678" });
+    await putWithCsrf(agent, "/api/v1/auth/llm-keys/gemini", { apiKey: "AIzaSyD-gemini-test1234" });
+    await putWithCsrf(agent, "/api/v1/auth/llm-keys/claude", { apiKey: "sk-ant-claude-test12345" });
+
+    const listResponse = await agent.get("/api/v1/auth/llm-keys");
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.items.length).toBe(3);
+
+    const providers = listResponse.body.items.map((k: { provider: string }) => k.provider).sort();
+    expect(providers).toEqual(["claude", "gemini", "openai"]);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("rejects invalid LLM provider names", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const response = await putWithCsrf(agent, "/api/v1/auth/llm-keys/invalid-provider", {
+      apiKey: "sk-test-1234567890abcdef"
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("INVALID_LLM_PROVIDER");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("rejects empty or too-short API keys", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const emptyResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: ""
+    });
+    expect(emptyResponse.status).toBe(400);
+    expect(emptyResponse.body.code).toBe("MISSING_API_KEY");
+
+    const shortResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: "short"
+    });
+    expect(shortResponse.status).toBe(400);
+    expect(shortResponse.body.code).toBe("INVALID_API_KEY");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("returns 404 when removing a non-existent LLM key", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const response = await deleteWithCsrf(agent, "/api/v1/auth/llm-keys/openai");
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe("LLM_KEY_NOT_FOUND");
 
     database.close();
     cleanupTestConfig(config);

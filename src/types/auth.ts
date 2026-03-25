@@ -4,6 +4,7 @@ export type OrganizationRole = "owner" | "admin" | "member" | "support";
 export type ConnectionStatus = "connected" | "needs_attention" | "pending" | "disabled";
 export type ProviderAuthProvider = "github" | "jira" | "google";
 export type ProviderAuthStatus = "connected" | "disconnected";
+export type LlmProvider = "openai" | "gemini" | "claude";
 export type ProviderConnectionMode = "oauth" | "unavailable";
 export type ProviderAuthMode = "oauth" | "mixed" | "unavailable";
 export type ProviderAuthFlowEntry = "login" | "connect";
@@ -110,6 +111,16 @@ export interface ProviderAuthRequirement {
   google: UserProviderConnection | null;
 }
 
+export interface LlmProviderKey {
+  id: string;
+  userId: string;
+  provider: LlmProvider;
+  displayLabel: string;
+  maskedKey: string;
+  connectedAt: string;
+  updatedAt: string;
+}
+
 export interface OrganizationSettings {
   teamMembers: TeamMember[];
   trackedRepos: TrackedRepo[];
@@ -123,4 +134,5 @@ export interface SessionSnapshot {
   csrfToken: string | null;
   authMode: "local";
   providerAuth: ProviderAuthRequirement;
+  llmProviderKeys: LlmProviderKey[];
 }

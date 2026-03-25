@@ -39,7 +39,7 @@ import { createRateLimitMiddleware } from "./lib/rate-limit.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
-import type { OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
+import type { LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery } from "./types/activity.js";
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
@@ -166,7 +166,8 @@ function buildSessionSnapshot(
       organizations: [],
       csrfToken,
       authMode: "local",
-      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement())
+      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
+      llmProviderKeys: []
     };
   }
 
@@ -181,7 +182,8 @@ function buildSessionSnapshot(
       organizations: [],
       csrfToken,
       authMode: "local",
-      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement())
+      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
+      llmProviderKeys: []
     };
   }
 
@@ -205,7 +207,8 @@ function buildSessionSnapshot(
     providerAuth: applyProviderAuthRuntime(
       config,
       database.getProviderAuthRequirement(userId)
-    )
+    ),
+    llmProviderKeys: database.listLlmProviderKeys(userId)
   };
 }
 
@@ -722,6 +725,97 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         config,
         database.getProviderAuthRequirement(userId)
       )
+    });
+  });
+
+  const LLM_PROVIDERS = new Set(["openai", "gemini", "claude"]);
+
+  function validateLlmProvider(value: string): LlmProvider {
+    if (!LLM_PROVIDERS.has(value)) {
+      throw new AppError(`Invalid LLM provider: ${value}. Must be one of openai, gemini, claude.`, {
+        code: "INVALID_LLM_PROVIDER",
+        statusCode: 400
+      });
+    }
+    return value as LlmProvider;
+  }
+
+  app.get("/api/v1/auth/llm-keys", requireAuth, (request, response) => {
+    const keys = database.listLlmProviderKeys(request.session.userId!);
+    response.json({ items: keys });
+  });
+
+  app.put("/api/v1/auth/llm-keys/:provider", requireAuth, (request, response) => {
+    const provider = validateLlmProvider(
+      Array.isArray(request.params.provider) ? request.params.provider[0] : request.params.provider ?? ""
+    );
+    const apiKey = String(request.body?.apiKey ?? "").trim();
+
+    if (!apiKey) {
+      throw new AppError("An API key is required.", {
+        code: "MISSING_API_KEY",
+        statusCode: 400
+      });
+    }
+
+    if (apiKey.length < 8) {
+      throw new AppError("API key is too short to be valid.", {
+        code: "INVALID_API_KEY",
+        statusCode: 400
+      });
+    }
+
+    const key = database.upsertLlmProviderKey(request.session.userId!, provider, apiKey);
+
+    const organizations = database.listUserOrganizations(request.session.userId!);
+    const organization = organizations[0];
+    if (organization) {
+      database.recordAuditEvent({
+        organizationId: organization.id,
+        actorUserId: request.session.userId!,
+        eventType: "llm_key.saved",
+        targetType: "llm_provider_key",
+        targetId: key.id,
+        metadata: { provider }
+      });
+    }
+
+    response.json({
+      key,
+      llmProviderKeys: database.listLlmProviderKeys(request.session.userId!)
+    });
+  });
+
+  app.delete("/api/v1/auth/llm-keys/:provider", requireAuth, (request, response) => {
+    const provider = validateLlmProvider(
+      Array.isArray(request.params.provider) ? request.params.provider[0] : request.params.provider ?? ""
+    );
+    const userId = request.session.userId!;
+    const deleted = database.deleteLlmProviderKey(userId, provider);
+
+    if (!deleted) {
+      throw new AppError(`No ${provider} API key found to remove.`, {
+        code: "LLM_KEY_NOT_FOUND",
+        statusCode: 404
+      });
+    }
+
+    const organizations = database.listUserOrganizations(userId);
+    const organization = organizations[0];
+    if (organization) {
+      database.recordAuditEvent({
+        organizationId: organization.id,
+        actorUserId: userId,
+        eventType: "llm_key.removed",
+        targetType: "llm_provider_key",
+        metadata: { provider }
+      });
+    }
+
+    response.json({
+      removed: true,
+      provider,
+      llmProviderKeys: database.listLlmProviderKeys(userId)
     });
   });
 
