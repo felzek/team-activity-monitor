@@ -18,7 +18,6 @@ import {
   toSessionUser,
   validateConnectorInput,
   validateInviteInput,
-  validateProviderLoginInput,
   validateProviderParam,
   validateRegistrationInput,
   verifyPassword
@@ -28,9 +27,7 @@ import { teamMemberSchema, trackedRepoSchema } from "./config.js";
 import type { AppDatabase } from "./db.js";
 import { AppError, isAppError } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
-import { generateGroundedResponse, generateDashboardInsight } from "./lib/ollama.js";
-import { fetchGitHubDashboard } from "./dashboard/github.js";
-import { fetchJiraDashboard } from "./dashboard/jira.js";
+import { buildGroundedResponsePrompt, generateGroundedResponse, RESPONSE_SYSTEM_PROMPT } from "./lib/ollama.js";
 import {
   applyProviderAuthRuntime,
   buildProviderAuthorizationUrl,
@@ -39,10 +36,16 @@ import {
   getProviderConnectionMode
 } from "./lib/provider-auth.js";
 import { createRateLimitMiddleware } from "./lib/rate-limit.js";
+import { AnthropicAdapter } from "./llm/adapters/anthropic.js";
+import { GeminiAdapter } from "./llm/adapters/gemini.js";
+import { OpenAiAdapter } from "./llm/adapters/openai.js";
+import { LlmProviderRegistry } from "./llm/registry.js";
+import { LlmService } from "./llm/service.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
-import type { OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
+import { createLlmRouter } from "./routes/llm.js";
+import type { LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery } from "./types/activity.js";
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
@@ -70,17 +73,6 @@ function fallbackDisplayName(email: string, providedName?: string | null): strin
     .split(" ")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
-}
-
-function fallbackProviderLogin(provider: ProviderAuthProvider, email: string): string {
-  if (provider === "github") {
-    return email
-      .split("@")[0]
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, "-");
-  }
-
-  return email.toLowerCase();
 }
 
 function applySecurityHeaders(app: express.Express): void {
@@ -149,11 +141,11 @@ function filteredParsedQuery(
 
 function baseProviderAuthRequirement(): SessionSnapshot["providerAuth"] {
   return {
-    mode: "demo",
+    mode: "unavailable",
     providerModes: {
-      github: "demo",
-      jira: "demo",
-      google: "demo"
+      github: "unavailable",
+      jira: "unavailable",
+      google: "unavailable"
     },
     requiredProviders: ["github", "jira"],
     missingProviders: ["github", "jira"],
@@ -180,7 +172,8 @@ function buildSessionSnapshot(
       organizations: [],
       csrfToken,
       authMode: "local",
-      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement())
+      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
+      llmProviderKeys: []
     };
   }
 
@@ -195,7 +188,8 @@ function buildSessionSnapshot(
       organizations: [],
       csrfToken,
       authMode: "local",
-      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement())
+      providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
+      llmProviderKeys: []
     };
   }
 
@@ -219,7 +213,8 @@ function buildSessionSnapshot(
     providerAuth: applyProviderAuthRuntime(
       config,
       database.getProviderAuthRequirement(userId)
-    )
+    ),
+    llmProviderKeys: database.listLlmProviderKeys(userId)
   };
 }
 
@@ -267,6 +262,13 @@ function providerResultPath(
 
 export function createApp(config: AppConfig, logger: Logger, database: AppDatabase) {
   const app = express();
+
+  // Build the LLM service once so it's accessible to all routes (query + /api/llm/*)
+  const llmRegistry = new LlmProviderRegistry()
+    .register(new AnthropicAdapter())
+    .register(new OpenAiAdapter())
+    .register(new GeminiAdapter());
+  const llmService = new LlmService(llmRegistry, database, logger);
 
   applySecurityHeaders(app);
   app.use(createHttpLogger());
@@ -372,6 +374,93 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     });
   });
 
+  // Demo endpoints — no auth required, use fixture data
+  app.get("/api/v1/demo/session", (request, response) => {
+    const csrfToken = request.session.csrfToken ?? null;
+    const demoOrgId = request.session.demoOrganizationId;
+
+    if (demoOrgId) {
+      response.json({ csrfToken, organizationId: demoOrgId });
+      return;
+    }
+
+    const demoEmail = `demo-${randomUUID().slice(0, 8)}@demo.local`;
+    const { user: demoUser, organization: demoOrg } = database.createUserWithOrganization({
+      name: "Demo User",
+      email: demoEmail,
+      passwordHash: "demo-no-login",
+      organizationName: "Demo Workspace"
+    });
+
+    database.updateOrganizationSettings(demoOrg.id, {
+      teamMembers: config.teamMembers,
+      trackedRepos: config.trackedRepos
+    });
+
+    request.session.demoOrganizationId = demoOrg.id;
+    request.session.demoUserId = demoUser.id;
+
+    response.json({ csrfToken, organizationId: demoOrg.id });
+  });
+
+  app.post("/api/v1/demo/query", async (request, response) => {
+    const demoOrgId = request.session.demoOrganizationId;
+    const demoUserId = request.session.demoUserId;
+
+    if (!demoOrgId || !demoUserId) {
+      throw new AppError("Demo session not initialized. Call GET /api/v1/demo/session first.", {
+        code: "DEMO_NOT_INITIALIZED",
+        statusCode: 400
+      });
+    }
+
+    const query = typeof request.body?.query === "string" ? request.body.query.trim() : "";
+
+    if (!query) {
+      throw new AppError("A non-empty query is required.", {
+        code: "EMPTY_QUERY",
+        statusCode: 400
+      });
+    }
+
+    const demoConfig = {
+      ...config,
+      useRecordedFixtures: true
+    };
+
+    const orgSettings = database.getOrganizationSettings(demoOrgId);
+    const executionConfig = {
+      ...demoConfig,
+      teamMembers: orgSettings.teamMembers,
+      trackedRepos: orgSettings.trackedRepos
+    };
+
+    const parsedQuery = parseQuery(query, config.appTimezone);
+    const identity = resolveIdentity(
+      parsedQuery.memberText,
+      parsedQuery.rawQuery,
+      executionConfig.teamMembers
+    );
+
+    const demoLogger = logger.child({ demo: true, query });
+
+    const summary = await buildActivitySummary(
+      executionConfig,
+      parsedQuery,
+      identity,
+      demoLogger
+    );
+
+    const responseText = await generateGroundedResponse(executionConfig, summary, demoLogger);
+
+    response.json({
+      query,
+      parsedQuery,
+      summary,
+      responseText
+    });
+  });
+
   app.get(["/api/auth/session", "/api/v1/auth/session"], (request, response) => {
     response.json(buildSessionSnapshot(request, database, config));
   });
@@ -393,8 +482,8 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     );
 
     try {
-      if (getProviderConnectionMode(config, provider) !== "oauth") {
-        throw new AppError(`${provider} OAuth is not configured in this environment.`, {
+      if (getProviderConnectionMode(config, provider) === "unavailable") {
+        throw new AppError(`${provider} sign-in is not available in this environment.`, {
           code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
           statusCode: 501
         });
@@ -415,109 +504,6 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         error instanceof Error ? error.message : "Provider sign-in could not be started.";
       response.redirect(providerResultPath(request.session.userId ? "connect" : "login", provider, "error", message));
     }
-  });
-
-  app.post("/api/v1/auth/providers/:provider/login", async (request, response) => {
-    const provider = validateProviderParam(
-      Array.isArray(request.params.provider)
-        ? request.params.provider[0]
-        : request.params.provider ?? ""
-    );
-
-    if (getProviderConnectionMode(config, provider) !== "demo") {
-      throw new AppError(`${provider} demo sign-in is disabled in this environment.`, {
-        code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
-        statusCode: 501
-      });
-    }
-    const input = validateProviderLoginInput(request.body ?? {});
-
-    let user = database.findUserByEmail(input.email);
-    let organization: OrganizationSummary | null = null;
-    let createdAccount = false;
-
-    if (!user) {
-      const displayName = fallbackDisplayName(input.email, input.name);
-      const created = database.createUserWithOrganization({
-        name: displayName,
-        email: input.email,
-        passwordHash: await hashPassword(randomUUID()),
-        organizationName: input.organizationName ?? undefined
-      });
-
-      user = {
-        ...created.user,
-        passwordHash: ""
-      };
-      organization = created.organization;
-      createdAccount = true;
-      request.session.userId = created.user.id;
-      request.session.currentOrganizationId = created.organization.id;
-
-      database.recordAuditEvent({
-        organizationId: created.organization.id,
-        actorUserId: created.user.id,
-        eventType: "auth.registered",
-        targetType: "user",
-        targetId: created.user.id,
-        metadata: {
-          email: created.user.email,
-          provider,
-          authMethod: "demo_provider"
-        }
-      });
-    }
-
-    request.session.userId = user.id;
-    const organizations = database.listUserOrganizations(user.id);
-    organization = requireActiveOrganization(request, organizations);
-
-    database.recordAuditEvent({
-      organizationId: organization.id,
-      actorUserId: user.id,
-      eventType: "auth.signed_in",
-      targetType: "user",
-      targetId: user.id,
-      metadata: {
-        email: user.email,
-        provider,
-        authMethod: "demo_provider"
-      }
-    });
-
-    const connector = database.upsertUserProviderConnection(user.id, provider, {
-      status: "connected",
-      externalAccountId: `${provider}:${user.email}`,
-      displayName: user.name,
-      login: fallbackProviderLogin(provider, user.email),
-      email: user.email,
-      authMethod: "demo",
-      connectedAt: new Date().toISOString(),
-      metadata: {
-        mode: "demo",
-        connectedByUserId: user.id,
-        connectedFrom: "login"
-      }
-    });
-
-    database.recordAuditEvent({
-      organizationId: organization.id,
-      actorUserId: user.id,
-      eventType: "provider_auth.connected",
-      targetType: `${provider}_auth`,
-      targetId: connector.id,
-      metadata: {
-        provider,
-        authMethod: "demo",
-        connectedFrom: "login"
-      }
-    });
-
-    response.status(createdAccount ? 201 : 200).json({
-      ...buildSessionSnapshot(request, database, config),
-      createdAccount,
-      authProvider: provider
-    });
   });
 
   app.get("/api/v1/auth/providers/:provider/callback", async (request, response) => {
@@ -722,64 +708,6 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     }
   });
 
-  app.post("/api/v1/auth/providers/:provider/demo-connect", requireAuth, (request, response) => {
-    const provider = validateProviderParam(
-      Array.isArray(request.params.provider)
-        ? request.params.provider[0]
-        : request.params.provider ?? ""
-    );
-    if (getProviderConnectionMode(config, provider) !== "demo") {
-      throw new AppError("Demo provider sign-in is disabled in this environment.", {
-        code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
-        statusCode: 501
-      });
-    }
-    const user = database.findUserById(request.session.userId!);
-
-    if (!user) {
-      throw new AppError("Signed-in user could not be found.", {
-        code: "USER_NOT_FOUND",
-        statusCode: 404
-      });
-    }
-
-    const connector = database.upsertUserProviderConnection(user.id, provider, {
-      status: "connected",
-      externalAccountId: `${provider}:${user.id}`,
-      displayName: user.name,
-      login: fallbackProviderLogin(provider, user.email),
-      email: user.email,
-      authMethod: "demo",
-      connectedAt: new Date().toISOString(),
-      metadata: {
-        mode: "demo",
-        connectedByUserId: user.id
-      }
-    });
-    const organizations = database.listUserOrganizations(user.id);
-    const organization = requireActiveOrganization(request, organizations);
-
-    database.recordAuditEvent({
-      organizationId: organization.id,
-      actorUserId: user.id,
-      eventType: "provider_auth.connected",
-      targetType: `${provider}_auth`,
-      targetId: connector.id,
-      metadata: {
-        provider,
-        authMethod: "demo"
-      }
-    });
-
-    response.json({
-      connector,
-      providerAuth: applyProviderAuthRuntime(
-        config,
-        database.getProviderAuthRequirement(user.id)
-      )
-    });
-  });
-
   app.delete("/api/v1/auth/providers/:provider", requireAuth, (request, response) => {
     const provider = validateProviderParam(
       Array.isArray(request.params.provider)
@@ -808,6 +736,97 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         config,
         database.getProviderAuthRequirement(userId)
       )
+    });
+  });
+
+  const LLM_PROVIDERS = new Set(["openai", "gemini", "claude"]);
+
+  function validateLlmProvider(value: string): LlmProvider {
+    if (!LLM_PROVIDERS.has(value)) {
+      throw new AppError(`Invalid LLM provider: ${value}. Must be one of openai, gemini, claude.`, {
+        code: "INVALID_LLM_PROVIDER",
+        statusCode: 400
+      });
+    }
+    return value as LlmProvider;
+  }
+
+  app.get("/api/v1/auth/llm-keys", requireAuth, (request, response) => {
+    const keys = database.listLlmProviderKeys(request.session.userId!);
+    response.json({ items: keys });
+  });
+
+  app.put("/api/v1/auth/llm-keys/:provider", requireAuth, (request, response) => {
+    const provider = validateLlmProvider(
+      Array.isArray(request.params.provider) ? request.params.provider[0] : request.params.provider ?? ""
+    );
+    const apiKey = String(request.body?.apiKey ?? "").trim();
+
+    if (!apiKey) {
+      throw new AppError("An API key is required.", {
+        code: "MISSING_API_KEY",
+        statusCode: 400
+      });
+    }
+
+    if (apiKey.length < 8) {
+      throw new AppError("API key is too short to be valid.", {
+        code: "INVALID_API_KEY",
+        statusCode: 400
+      });
+    }
+
+    const key = database.upsertLlmProviderKey(request.session.userId!, provider, apiKey);
+
+    const organizations = database.listUserOrganizations(request.session.userId!);
+    const organization = organizations[0];
+    if (organization) {
+      database.recordAuditEvent({
+        organizationId: organization.id,
+        actorUserId: request.session.userId!,
+        eventType: "llm_key.saved",
+        targetType: "llm_provider_key",
+        targetId: key.id,
+        metadata: { provider }
+      });
+    }
+
+    response.json({
+      key,
+      llmProviderKeys: database.listLlmProviderKeys(request.session.userId!)
+    });
+  });
+
+  app.delete("/api/v1/auth/llm-keys/:provider", requireAuth, (request, response) => {
+    const provider = validateLlmProvider(
+      Array.isArray(request.params.provider) ? request.params.provider[0] : request.params.provider ?? ""
+    );
+    const userId = request.session.userId!;
+    const deleted = database.deleteLlmProviderKey(userId, provider);
+
+    if (!deleted) {
+      throw new AppError(`No ${provider} API key found to remove.`, {
+        code: "LLM_KEY_NOT_FOUND",
+        statusCode: 404
+      });
+    }
+
+    const organizations = database.listUserOrganizations(userId);
+    const organization = organizations[0];
+    if (organization) {
+      database.recordAuditEvent({
+        organizationId: organization.id,
+        actorUserId: userId,
+        eventType: "llm_key.removed",
+        targetType: "llm_provider_key",
+        metadata: { provider }
+      });
+    }
+
+    response.json({
+      removed: true,
+      provider,
+      llmProviderKeys: database.listLlmProviderKeys(userId)
     });
   });
 
@@ -1327,7 +1346,43 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         );
       }
 
-      const responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
+      // Use the user-selected LLM provider when a modelId is provided; fall back to Ollama otherwise.
+      const requestedModelId =
+        typeof request.body?.modelId === "string" ? request.body.modelId.trim() : "";
+
+      let responseText: string;
+      let modelUsed: string | null = null;
+      let modelWarning: string | null = null;
+
+      if (requestedModelId.startsWith("local:")) {
+        // Specific local Ollama model (e.g. "local:qwen2.5:7b")
+        const localModelName = requestedModelId.slice("local:".length);
+        responseText = await generateGroundedResponse(executionConfig, summary, requestLogger, localModelName);
+        modelUsed = requestedModelId;
+      } else if (requestedModelId) {
+        try {
+          const chatResp = await llmService.chat(request.session.userId!, {
+            modelId: requestedModelId,
+            messages: [
+              { role: "system", content: RESPONSE_SYSTEM_PROMPT },
+              { role: "user", content: buildGroundedResponsePrompt(summary) }
+            ]
+          });
+          responseText = chatResp.message.content;
+          modelUsed = requestedModelId;
+          requestLogger.info({ modelId: requestedModelId }, "Generated grounded response via LLM provider");
+        } catch (llmErr) {
+          const errMsg = llmErr instanceof Error ? llmErr.message : String(llmErr);
+          modelWarning = `${errMsg} Answer generated using Qwen 2.5 7B (local) instead.`;
+          requestLogger.warn(
+            { modelId: requestedModelId, err: errMsg },
+            "LLM provider failed; falling back to Qwen 2.5 7B"
+          );
+          responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
+        }
+      } else {
+        responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
+      }
 
       const queryRun = database.saveQueryRun({
         organizationId: organization.id,
@@ -1355,6 +1410,8 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         parsedQuery: adjustedParsedQuery,
         summary,
         responseText,
+        modelUsed,
+        modelWarning,
         connectorStatus: {
           jira: jiraConnection,
           github: githubConnection

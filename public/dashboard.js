@@ -9,35 +9,15 @@ const userName = document.getElementById("user-name");
 const orgName = document.getElementById("org-name");
 const orgRole = document.getElementById("org-role");
 const orgSlug = document.getElementById("org-slug");
-const statusPill = document.getElementById("status-pill");
 const lastUpdated = document.getElementById("last-updated");
-const historyList = document.getElementById("history-list");
-const membersList = document.getElementById("members-list");
-const inviteList = document.getElementById("invite-list");
-const auditList = document.getElementById("audit-list");
-const jobsList = document.getElementById("jobs-list");
 const memberCount = document.getElementById("member-count");
 const queryCount = document.getElementById("query-count");
 const auditCount = document.getElementById("audit-count");
 const logoutButton = document.getElementById("logout-button");
-const useExampleButton = document.getElementById("use-example");
 const orgSelector = document.getElementById("org-selector");
-const inviteForm = document.getElementById("invite-form");
-const settingsForm = document.getElementById("settings-form");
-const jiraForm = document.getElementById("jira-form");
-const githubForm = document.getElementById("github-form");
-const teamMembersJson = document.getElementById("team-members-json");
-const trackedReposJson = document.getElementById("tracked-repos-json");
-const jiraSecretRef = document.getElementById("jira-secret-ref");
-const githubSecretRef = document.getElementById("github-secret-ref");
-const jiraEnabled = document.getElementById("jira-enabled");
-const githubEnabled = document.getElementById("github-enabled");
-const jiraStatus = document.getElementById("jira-status");
-const githubStatus = document.getElementById("github-status");
-const workspaceJiraHealth = document.getElementById("workspace-jira-health");
-const workspaceGitHubHealth = document.getElementById("workspace-github-health");
-const workspaceJiraMeta = document.getElementById("workspace-jira-meta");
-const workspaceGitHubMeta = document.getElementById("workspace-github-meta");
+const tabWorkspace = document.getElementById("tab-workspace");
+const tabSettings = document.getElementById("tab-settings");
+const dashboardMain = document.querySelector("[data-view]");
 const userGitHubAuth = document.getElementById("user-github-auth");
 const userJiraAuth = document.getElementById("user-jira-auth");
 const userGitHubAuthMeta = document.getElementById("user-github-auth-meta");
@@ -56,6 +36,55 @@ const sourceStatusList = document.getElementById("source-status-list");
 const jiraResults = document.getElementById("jira-results");
 const githubResults = document.getElementById("github-results");
 const caveatsList = document.getElementById("caveats-list");
+const historyList = document.getElementById("history-list");
+const membersList = document.getElementById("members-list");
+const inviteList = document.getElementById("invite-list");
+const auditList = document.getElementById("audit-list");
+const jobsList = document.getElementById("jobs-list");
+const settingsForm = document.getElementById("settings-form");
+const jiraForm = document.getElementById("jira-form");
+const githubForm = document.getElementById("github-form");
+const teamMembersJson = document.getElementById("team-members-json");
+const trackedReposJson = document.getElementById("tracked-repos-json");
+const jiraSecretRef = document.getElementById("jira-secret-ref");
+const githubSecretRef = document.getElementById("github-secret-ref");
+const jiraEnabled = document.getElementById("jira-enabled");
+const githubEnabled = document.getElementById("github-enabled");
+const jiraStatus = document.getElementById("jira-status");
+const githubStatus = document.getElementById("github-status");
+const inviteForm = document.getElementById("invite-form");
+
+const LLM_PROVIDERS = ["openai", "gemini", "claude"];
+const LLM_PROVIDER_SETUP = {
+  openai: {
+    docsUrl: "https://platform.openai.com/api-keys",
+    keyHint:
+      "Add your API key on Settings → LLM providers first: paste into OpenAI and Save key. Short path: Get key on platform.openai.com → API keys → create secret → paste in Settings → Save key. (Full steps also on the Workspace card.)"
+  },
+  gemini: {
+    docsUrl: "https://aistudio.google.com/apikey",
+    keyHint:
+      "Add your API key on Settings → LLM providers first: paste into Google Gemini and Save key. Short path: aistudio.google.com → Get API key → create → paste in Settings → Save key. (Full steps also on the Workspace card.)"
+  },
+  claude: {
+    docsUrl: "https://console.anthropic.com/settings/keys",
+    keyHint:
+      "Add your API key on Settings → LLM providers first: paste into Anthropic Claude and Save key. Short path: console.anthropic.com → Settings → API keys → create → paste in Settings → Save key. (Full steps also on the Workspace card.)"
+  }
+};
+
+const llmDom = {};
+for (const p of LLM_PROVIDERS) {
+  llmDom[p] = {
+    keyInput: document.getElementById(`llm-${p}-key-input`),
+    settingsCard: document.querySelector(`[data-llm-settings="${p}"]`),
+    settingsStatus: document.getElementById(`llm-${p}-settings-status`),
+    save: document.getElementById(`llm-${p}-save`),
+    remove: document.getElementById(`llm-${p}-remove`)
+  };
+}
+
+let llmProviderKeys = [];
 
 const exampleQueries = [
   "What is John working on these days?",
@@ -64,7 +93,6 @@ const exampleQueries = [
   "Show me Lisa's recent pull requests"
 ];
 
-let exampleIndex = 0;
 let csrfToken = null;
 let currentOrganizationId = null;
 let organizations = [];
@@ -112,20 +140,29 @@ function humanizeStatus(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function setBanner(message, type = "warning") {
+function setBanner(message, type = "warning", layout = "default") {
   if (!message) {
     banner.textContent = "";
+    banner.innerHTML = "";
     banner.className = "dashboard-banner hidden";
     return;
   }
 
+  if (layout === "api-key") {
+    const raw = String(message);
+    const nl = raw.indexOf("\n");
+    const titleLine = nl >= 0 ? raw.slice(0, nl).trim() : raw.trim();
+    const detail = nl >= 0 ? raw.slice(nl + 1).trim() : "";
+    banner.innerHTML = detail
+      ? `<span class="dashboard-banner-api-key-title">${escapeHtml(titleLine)}</span><span class="dashboard-banner-api-key-detail">${escapeHtml(detail)}</span>`
+      : `<span class="dashboard-banner-api-key-title">${escapeHtml(titleLine)}</span>`;
+    banner.className = `dashboard-banner ${type} dashboard-banner--api-key`;
+    return;
+  }
+
+  banner.innerHTML = "";
   banner.textContent = message;
   banner.className = `dashboard-banner ${type}`;
-}
-
-function setStatus(text, state = "ready") {
-  statusPill.textContent = text;
-  statusPill.dataset.state = state;
 }
 
 function setMetricValue(element, value) {
@@ -142,6 +179,31 @@ function renderEmptyResponse(title, body) {
     <h3>${escapeHtml(title)}</h3>
     <p>${escapeHtml(body)}</p>
   `;
+}
+
+function showConnectPrompt(missingProviders) {
+  const buttons = missingProviders.map((provider) => {
+    const label = provider === "github" ? "GitHub" : provider === "google" ? "Google" : "Jira";
+    const icon = PROVIDER_ICONS[provider] || "";
+    return `<button type="button" class="button-secondary connect-prompt-btn" data-provider="${escapeHtml(provider)}">${icon} Connect ${escapeHtml(label)}</button>`;
+  }).join("");
+
+  responseShell.classList.add("is-empty");
+  responseShell.classList.remove("is-loading");
+  responseEmpty.classList.remove("hidden");
+  responseStructured.classList.add("hidden");
+  responseEmpty.innerHTML = `
+    <p class="eyebrow">Providers not connected</p>
+    <h3>Connect your accounts to run queries</h3>
+    <p>This workspace requires GitHub and Jira sign-ins before you can query teammate activity.</p>
+    <div class="connect-prompt-row">${buttons}</div>
+  `;
+
+  responseEmpty.querySelectorAll(".connect-prompt-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      connectProviderAuth(btn.dataset.provider);
+    });
+  });
 }
 
 function renderLoadingResponse(query) {
@@ -205,12 +267,40 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function renderOrganizations() {
+  orgSelector.innerHTML = organizations
+    .map(
+      (organization) => `
+        <option value="${escapeHtml(organization.id)}" ${organization.id === currentOrganizationId ? "selected" : ""}>
+          ${escapeHtml(organization.name)} · ${escapeHtml(organization.role)}
+        </option>
+      `
+    )
+    .join("");
+}
+
+function switchView(view) {
+  dashboardMain.dataset.view = view;
+  tabWorkspace.classList.toggle("is-active", view === "workspace");
+  tabSettings.classList.toggle("is-active", view === "settings");
+  if (view === "settings") {
+    void loadSettingsData();
+  }
+}
+
+function openLlmProvidersSettings() {
+  switchView("settings");
+  window.setTimeout(() => {
+    document.getElementById("llm-providers-settings")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("llm-openai-key-input")?.focus();
+  }, 50);
+}
+
 function renderDataList(element, items, emptyMessage, formatter) {
   if (!items || items.length === 0) {
     element.innerHTML = `<p class="history-empty">${escapeHtml(emptyMessage)}</p>`;
     return;
   }
-
   element.innerHTML = items.map(formatter).join("");
 }
 
@@ -229,10 +319,10 @@ function renderHistory(items) {
       </article>
     `
   );
-
   document.querySelectorAll(".history-replay").forEach((button) => {
     button.addEventListener("click", () => {
       queryInput.value = button.dataset.query || "";
+      switchView("workspace");
       queryInput.focus();
       queryInput.setSelectionRange(queryInput.value.length, queryInput.value.length);
     });
@@ -311,36 +401,6 @@ function renderJobs(items) {
   );
 }
 
-function renderOrganizations() {
-  orgSelector.innerHTML = organizations
-    .map(
-      (organization) => `
-        <option value="${escapeHtml(organization.id)}" ${organization.id === currentOrganizationId ? "selected" : ""}>
-          ${escapeHtml(organization.name)} · ${escapeHtml(organization.role)}
-        </option>
-      `
-    )
-    .join("");
-}
-
-function renderConnectorSnapshot(connection, valueElement, metaElement) {
-  const tone = !connection.enabled
-    ? "muted"
-    : connection.status === "connected"
-      ? "success"
-      : connection.status === "needs_attention"
-        ? "warning"
-        : "error";
-
-  valueElement.textContent = !connection.enabled ? "Disabled" : humanizeStatus(connection.status);
-  valueElement.className = `source-health-value tone-${tone}`;
-  metaElement.textContent = connection.lastValidatedAt
-    ? `Last validated ${formatDateTime(connection.lastValidatedAt)}`
-    : connection.enabled
-      ? "No successful validation has been recorded yet."
-      : "Enable this connector when the workspace is ready.";
-}
-
 function connectorSummary(connector) {
   if (!connector.enabled) {
     return "Disabled for this workspace.";
@@ -362,8 +422,14 @@ function providerAuthTone(connection) {
 }
 
 function providerAuthModeFor(provider) {
-  return providerAuthState?.providerModes?.[provider] || "demo";
+  return providerAuthState?.providerModes?.[provider] || "unavailable";
 }
+
+const PROVIDER_ICONS = {
+  github: '<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.82-.26.82-.58l-.02-2.05c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.08-.73.08-.73 1.2.09 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .1-.78.42-1.3.76-1.6-2.67-.31-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6.02 0c2.28-1.55 3.29-1.23 3.29-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22l-.01 3.29c0 .32.21.7.82.58A12 12 0 0 0 12 .3"/></svg>',
+  jira: '<svg class="provider-icon" viewBox="0 0 24 24"><path d="M11.53 2c0 5.24-4.26 9.5-9.53 9.5v1c5.27 0 9.53 4.26 9.53 9.5h.94c0-5.24 4.26-9.5 9.53-9.5v-1c-5.27 0-9.53-4.26-9.53-9.5h-.94z" fill="#2684FF"/></svg>',
+  google: '<svg class="provider-icon" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>'
+};
 
 function renderProviderAuthCard(provider, connection, valueElement, metaElement, connectButton, disconnectButton) {
   const connected = connection?.status === "connected";
@@ -375,44 +441,24 @@ function renderProviderAuthCard(provider, connection, valueElement, metaElement,
   valueElement.className = `source-health-value tone-${tone}`;
   metaElement.textContent = connected
     ? `${connection.displayName || connection.login || connection.email || label} linked${connection.connectedAt ? ` · ${formatDateTime(connection.connectedAt)}` : ""}`
-    : mode === "demo"
-      ? `Connect your ${label} account before running workspace queries.`
-      : mode === "oauth"
-        ? `Authorize your ${label} account before running workspace queries.`
-        : `${label} OAuth must be configured in this environment before users can connect.`;
+    : mode === "oauth"
+      ? `Authorize your ${label} account before running workspace queries.`
+      : `${label} OAuth must be configured in this environment before users can connect.`;
 
   connectButton.classList.toggle("hidden", connected);
   disconnectButton.classList.toggle("hidden", !connected);
   connectButton.disabled = mode === "unavailable";
   disconnectButton.disabled = !connected;
-  connectButton.textContent =
-    mode === "demo"
-      ? `Connect ${label}`
-      : mode === "oauth"
-        ? `Continue with ${label}`
-        : `${label} OAuth unavailable`;
+  const icon = PROVIDER_ICONS[provider] || "";
+  connectButton.innerHTML = mode === "oauth"
+    ? `${icon} Continue with ${label}`
+    : `${icon} ${label} OAuth unavailable`;
 }
 
 function setQueryAvailability(providerAuth) {
-  const allConnected = Boolean(providerAuth?.allConnected);
-  const disabled = !allConnected;
-
-  queryInput.disabled = disabled;
-  useExampleButton.disabled = disabled;
-  queryForm.querySelector('button[type="submit"]').disabled = disabled;
-  document.querySelectorAll(".prompt-chip").forEach((button) => {
-    button.disabled = disabled;
-  });
-
-  if (disabled) {
-    const missing = providerAuth?.missingProviders?.join(" and ") || "GitHub and Jira";
-    queryInput.value = "";
-    queryInput.placeholder = `Connect ${missing} before running workspace queries.`;
-  } else {
-    queryInput.placeholder = "What is John working on these days?";
-    if (!queryInput.value.trim()) {
-      queryInput.value = "What is John working on these days?";
-    }
+  queryInput.placeholder = "What is John working on these days?";
+  if (!queryInput.value.trim()) {
+    queryInput.value = "What is John working on these days?";
   }
 }
 
@@ -768,6 +814,137 @@ function renderQueryResponse(payload) {
   renderCaveats(summary, payload);
   responseText.textContent = rawResponse;
   lastUpdated.textContent = `Last updated ${formatDateTime(new Date().toISOString())}`;
+
+  // Show which model was used (provider model or local fallback)
+  if (responseModelBadge) {
+    if (payload.modelUsed) {
+      const model = chatModels.find((m) => m.id === payload.modelUsed);
+      const label = model ? model.displayName : payload.modelUsed;
+      responseModelBadge.textContent = `Generated by ${label}`;
+      responseModelBadge.classList.remove("hidden");
+    } else {
+      responseModelBadge.textContent = "Generated by Qwen 2.5 7B (local)";
+      responseModelBadge.classList.remove("hidden");
+    }
+  }
+
+  // Surface model fallback warning (e.g. missing API key, provider error)
+  if (payload.modelWarning) {
+    const mw = payload.modelWarning;
+    if (/LLM providers first|API key.*Settings|Settings.*LLM providers/i.test(mw)) {
+      setBanner(`Add your API key in Settings first\n${mw}`, "warning", "api-key");
+    } else {
+      setBanner(mw, "warning");
+    }
+  }
+}
+
+const LLM_LABELS = { openai: "OpenAI", gemini: "Google Gemini", claude: "Anthropic Claude" };
+function openLlmProviderSetup(provider, { openDocs = false } = {}) {
+  const dom = llmDom[provider];
+  const label = LLM_LABELS[provider];
+  const setup = LLM_PROVIDER_SETUP[provider];
+
+  switchView("settings");
+
+  window.setTimeout(() => {
+    dom.settingsCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+    dom.keyInput?.focus();
+    dom.keyInput?.select();
+  }, 0);
+
+  if (openDocs && setup?.docsUrl) {
+    window.open(setup.docsUrl, "_blank", "noopener,noreferrer");
+  }
+
+  setBanner(
+    `${label} setup:\n${setup?.keyHint || "Paste your API key into the field below and click Save key."}\nOAuth is not available for LLM providers yet.`,
+    "warning",
+    "api-key"
+  );
+}
+
+function renderLlmProviderCards(keys) {
+  llmProviderKeys = keys || [];
+  const keyMap = {};
+  for (const k of llmProviderKeys) keyMap[k.provider] = k;
+
+  for (const provider of LLM_PROVIDERS) {
+    const dom = llmDom[provider];
+    const key = keyMap[provider];
+
+    if (dom.settingsStatus) {
+      dom.settingsStatus.textContent = key
+        ? `Saved · ${escapeHtml(key.maskedKey)} · updated ${formatDateTime(key.updatedAt)}`
+        : "No key saved yet. Use the steps above, paste your key, then click Save key.";
+    }
+    if (dom.remove) {
+      dom.remove.classList.toggle("hidden", !key);
+    }
+    if (dom.keyInput && key) {
+      dom.keyInput.placeholder = key.maskedKey;
+    }
+  }
+}
+
+function promptLlmApiKey(provider) {
+  openLlmProviderSetup(provider);
+}
+
+async function saveLlmKey(provider, apiKey, action) {
+  const label = LLM_LABELS[provider];
+  try {
+    const payload = await api(`/api/v1/auth/llm-keys/${provider}`, {
+      method: "PUT",
+      body: JSON.stringify({ apiKey })
+    });
+    renderLlmProviderCards(payload.llmProviderKeys);
+    setBanner(`${label} API key ${action === "update" ? "updated" : "saved"}.`, "success");
+    void loadChatModels();
+  } catch (error) {
+    setBanner(error instanceof Error ? error.message : `Could not save ${label} key.`, "error");
+  }
+}
+
+async function removeLlmKey(provider) {
+  const label = LLM_LABELS[provider];
+  if (!confirm(`Remove your ${label} API key? This cannot be undone.`)) return;
+  try {
+    const payload = await api(`/api/v1/auth/llm-keys/${provider}`, {
+      method: "DELETE"
+    });
+    renderLlmProviderCards(payload.llmProviderKeys);
+    setBanner(`${label} API key removed.`, "success");
+    void loadChatModels();
+  } catch (error) {
+    setBanner(error instanceof Error ? error.message : `Could not remove ${label} key.`, "error");
+  }
+}
+
+async function saveLlmKeyFromSettings(provider) {
+  const dom = llmDom[provider];
+  const value = dom.keyInput?.value?.trim();
+  if (!value) {
+    setBanner("Enter an API key before saving.", "warning");
+    return;
+  }
+  if (value.length < 8) {
+    setBanner("API key is too short to be valid.", "warning");
+    return;
+  }
+  const label = LLM_LABELS[provider];
+  try {
+    const payload = await api(`/api/v1/auth/llm-keys/${provider}`, {
+      method: "PUT",
+      body: JSON.stringify({ apiKey: value })
+    });
+    renderLlmProviderCards(payload.llmProviderKeys);
+    dom.keyInput.value = "";
+    setBanner(`${label} API key saved.`, "success");
+    void loadChatModels();
+  } catch (error) {
+    setBanner(error instanceof Error ? error.message : `Could not save ${label} key.`, "error");
+  }
 }
 
 async function loadSession() {
@@ -789,6 +966,7 @@ async function loadSession() {
     : "Role unavailable";
   orgSlug.textContent = payload.currentOrganization?.slug || "-";
   renderProviderAuth(payload.providerAuth);
+  renderLlmProviderCards(payload.llmProviderKeys || []);
   renderOrganizations();
 }
 
@@ -801,6 +979,36 @@ async function loadWorkspaceData() {
     );
     return;
   }
+
+  const [members, history, auditEvents] = await Promise.all([
+    api(`/api/v1/orgs/${currentOrganizationId}/members`),
+    api(`/api/v1/orgs/${currentOrganizationId}/query-runs`),
+    api(`/api/v1/orgs/${currentOrganizationId}/audit-events`)
+  ]);
+
+  memberCount.textContent = String(members.items.length);
+  queryCount.textContent = String(history.items.length);
+  auditCount.textContent = String(auditEvents.items.length);
+
+  const currentOrganization = organizations.find((organization) => organization.id === currentOrganizationId);
+  orgName.textContent = currentOrganization?.name || "No organization";
+  orgRole.textContent = currentOrganization ? `Role: ${currentOrganization.role}` : "Role unavailable";
+  orgSlug.textContent = currentOrganization?.slug || "-";
+
+  if (!providerAuthState?.allConnected) {
+    const missing = providerAuthState?.missingProviders?.join(" and ") || "GitHub and Jira";
+    setBanner(`Connect ${missing} before running workspace queries.`, "warning");
+    if (responseShell.classList.contains("is-empty")) {
+      renderEmptyResponse(
+        "Connect GitHub and Jira first",
+        "This workspace now requires both personal provider sign-ins before you can run teammate queries."
+      );
+    }
+  }
+}
+
+async function loadSettingsData() {
+  if (!currentOrganizationId) return;
 
   const [members, invitations, integrations, settings, history, auditEvents, jobs] =
     await Promise.all([
@@ -829,60 +1037,66 @@ async function loadWorkspaceData() {
   githubSecretRef.value = integrations.github.secretRef || "";
   githubEnabled.checked = integrations.github.enabled;
   githubStatus.textContent = `Status: ${humanizeStatus(integrations.github.status)}${integrations.github.lastValidatedAt ? ` · validated ${formatDateTime(integrations.github.lastValidatedAt)}` : ""}`;
+}
 
-  renderConnectorSnapshot(integrations.jira, workspaceJiraHealth, workspaceJiraMeta);
-  renderConnectorSnapshot(integrations.github, workspaceGitHubHealth, workspaceGitHubMeta);
+async function saveConnector(provider) {
+  const payload =
+    provider === "jira"
+      ? { secretRef: jiraSecretRef.value.trim(), enabled: jiraEnabled.checked }
+      : { secretRef: githubSecretRef.value.trim(), enabled: githubEnabled.checked };
 
-  const currentOrganization = organizations.find((organization) => organization.id === currentOrganizationId);
-  orgName.textContent = currentOrganization?.name || "No organization";
-  orgRole.textContent = currentOrganization ? `Role: ${currentOrganization.role}` : "Role unavailable";
-  orgSlug.textContent = currentOrganization?.slug || "-";
+  await api(`/api/v1/orgs/${currentOrganizationId}/integrations/${provider}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+  await loadSettingsData();
+  await loadWorkspaceData();
+  setBanner(`${provider === "jira" ? "Jira" : "GitHub"} connector saved.`, "success");
+}
 
-  if (!providerAuthState?.allConnected) {
-    const missing = providerAuthState?.missingProviders?.join(" and ") || "GitHub and Jira";
-    setStatus("Connect providers", "warning");
-    setBanner(`Connect ${missing} before running workspace queries.`, "warning");
-    if (responseShell.classList.contains("is-empty")) {
-      renderEmptyResponse(
-        "Connect GitHub and Jira first",
-        "This workspace now requires both personal provider sign-ins before you can run teammate queries."
-      );
-    }
-  } else if (
-    (integrations.jira.enabled && integrations.jira.status === "needs_attention") ||
-    (integrations.github.enabled && integrations.github.status === "needs_attention")
-  ) {
-    setStatus("Review connectors", "warning");
-  } else {
-    setStatus("Ready", "ready");
+async function saveSettings(event) {
+  event.preventDefault();
+  try {
+    await api(`/api/v1/orgs/${currentOrganizationId}/settings`, {
+      method: "PUT",
+      body: JSON.stringify({
+        teamMembers: JSON.parse(teamMembersJson.value),
+        trackedRepos: JSON.parse(trackedReposJson.value)
+      })
+    });
+    await loadSettingsData();
+    setBanner("Workspace settings saved.", "success");
+  } catch (error) {
+    setBanner(error instanceof Error ? error.message : "Could not save workspace settings.", "error");
   }
 }
 
-async function connectProviderAuth(provider) {
+async function createInvite(event) {
+  event.preventDefault();
+  const payload = Object.fromEntries(new FormData(inviteForm).entries());
+  try {
+    await api(`/api/v1/orgs/${currentOrganizationId}/invitations`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    inviteForm.reset();
+    await loadSettingsData();
+    setBanner("Invitation created.", "success");
+  } catch (error) {
+    setBanner(error instanceof Error ? error.message : "Could not create invitation.", "error");
+  }
+}
+
+function connectProviderAuth(provider) {
   const label = provider === "github" ? "GitHub" : "Jira";
   const mode = providerAuthModeFor(provider);
 
-  if (mode === "oauth") {
-    window.location.href = `/api/v1/auth/providers/${provider}/start`;
-    return;
-  }
-
   if (mode === "unavailable") {
-    setBanner(`${label} OAuth is not configured in this environment.`, "error");
+    setBanner(`${label} sign-in is not available in this environment.`, "error");
     return;
   }
 
-  try {
-    const payload = await api(`/api/v1/auth/providers/${provider}/demo-connect`, {
-      method: "POST"
-    });
-
-    renderProviderAuth(payload.providerAuth);
-    setBanner(`${label} account connected.`, "success");
-    setStatus(payload.providerAuth.allConnected ? "Ready" : "Connect required", payload.providerAuth.allConnected ? "ready" : "warning");
-  } catch (error) {
-    setBanner(error instanceof Error ? error.message : `Could not connect ${label}.`, "error");
-  }
+  window.location.href = `/api/v1/auth/providers/${provider}/start`;
 }
 
 async function disconnectProviderAuth(provider) {
@@ -899,7 +1113,6 @@ async function disconnectProviderAuth(provider) {
       "Queries stay disabled until your GitHub and Jira accounts are both linked."
     );
     setBanner(`${label} account disconnected.`, "warning");
-    setStatus("Connect required", "warning");
   } catch (error) {
     setBanner(error instanceof Error ? error.message : `Could not disconnect ${label}.`, "error");
   }
@@ -914,44 +1127,56 @@ async function runQuery(event) {
     return;
   }
 
-  setStatus("Running", "loading");
+  if (!providerAuthState?.allConnected) {
+    const missing = providerAuthState?.missingProviders || [];
+    const labels = missing.map((p) => (p === "github" ? "GitHub" : p === "google" ? "Google" : "Jira"));
+    setBanner(`Connect ${labels.join(" and ")} before running queries.`, "warning");
+    showConnectPrompt(missing);
+    responseShell.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
   renderLoadingResponse(query);
   setBanner("");
 
   try {
+    const selectedModelId = modelSelect ? modelSelect.value : "";
     const payload = await api(`/api/v1/orgs/${currentOrganizationId}/query`, {
       method: "POST",
-      body: JSON.stringify({ query })
+      body: JSON.stringify({ query, ...(selectedModelId ? { modelId: selectedModelId } : {}) })
     });
 
     renderQueryResponse(payload);
 
     if (payload.summary?.needsClarification) {
       setBanner(payload.summary.clarificationReason || "Clarification is required.", "warning");
-      setStatus("Needs clarification", "warning");
     } else if (payload.partialData) {
       setBanner("Answer generated with partial provider data. Review source status below.", "warning");
-      setStatus("Partial data", "warning");
     } else if (payload.summary?.caveats?.length) {
       setBanner(payload.summary.caveats[0], "warning");
-      setStatus("Ready", "ready");
     } else {
       setBanner("Answer generated and saved to workspace history.", "success");
-      setStatus("Ready", "ready");
     }
 
     await loadWorkspaceData();
   } catch (error) {
-    if (error?.code === "PROVIDER_AUTH_REQUIRED" && error.payload?.providerAuth) {
-      renderProviderAuth(error.payload.providerAuth);
+    if (error?.code === "PROVIDER_AUTH_REQUIRED") {
+      if (error.payload?.providerAuth) {
+        renderProviderAuth(error.payload.providerAuth);
+      }
+      const missing = error.payload?.providerAuth?.missingProviders || ["github", "jira"];
+      showConnectPrompt(missing);
+      const labels = missing.map((p) => (p === "github" ? "GitHub" : p === "google" ? "Google" : "Jira"));
+      setBanner(`Connect ${labels.join(" and ")} before running queries.`, "warning");
+      responseShell.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      responseText.textContent = "The query could not be completed.";
+      renderEmptyResponse(
+        "The query could not be completed",
+        error instanceof Error ? error.message : "Unexpected error."
+      );
+      setBanner(error instanceof Error ? error.message : "Unexpected error.", "error");
     }
-    responseText.textContent = "The query could not be completed.";
-    renderEmptyResponse(
-      "The query could not be completed",
-      error instanceof Error ? error.message : "Unexpected error."
-    );
-    setStatus("Error", "error");
-    setBanner(error instanceof Error ? error.message : "Unexpected error.", "error");
   }
 }
 
@@ -979,64 +1204,6 @@ async function switchOrganization() {
   }
 }
 
-async function saveConnector(provider) {
-  const payload =
-    provider === "jira"
-      ? {
-          secretRef: jiraSecretRef.value.trim(),
-          enabled: jiraEnabled.checked
-        }
-      : {
-          secretRef: githubSecretRef.value.trim(),
-          enabled: githubEnabled.checked
-        };
-
-  await api(`/api/v1/orgs/${currentOrganizationId}/integrations/${provider}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload)
-  });
-
-  await loadWorkspaceData();
-  setBanner(`${provider === "jira" ? "Jira" : "GitHub"} connector saved.`, "success");
-}
-
-async function saveSettings(event) {
-  event.preventDefault();
-
-  try {
-    await api(`/api/v1/orgs/${currentOrganizationId}/settings`, {
-      method: "PUT",
-      body: JSON.stringify({
-        teamMembers: JSON.parse(teamMembersJson.value),
-        trackedRepos: JSON.parse(trackedReposJson.value)
-      })
-    });
-
-    await loadWorkspaceData();
-    setBanner("Workspace settings saved.", "success");
-  } catch (error) {
-    setBanner(error instanceof Error ? error.message : "Could not save workspace settings.", "error");
-  }
-}
-
-async function createInvite(event) {
-  event.preventDefault();
-  const payload = Object.fromEntries(new FormData(inviteForm).entries());
-
-  try {
-    await api(`/api/v1/orgs/${currentOrganizationId}/invitations`, {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-
-    inviteForm.reset();
-    await loadWorkspaceData();
-    setBanner("Invitation created.", "success");
-  } catch (error) {
-    setBanner(error instanceof Error ? error.message : "Could not create invitation.", "error");
-  }
-}
-
 async function logout() {
   await api("/api/v1/auth/logout", { method: "POST" });
   window.location.href = "/";
@@ -1044,11 +1211,6 @@ async function logout() {
 
 queryForm.addEventListener("submit", runQuery);
 logoutButton.addEventListener("click", logout);
-useExampleButton.addEventListener("click", () => {
-  exampleIndex = (exampleIndex + 1) % exampleQueries.length;
-  queryInput.value = exampleQueries[exampleIndex];
-  queryInput.focus();
-});
 document.querySelectorAll(".prompt-chip").forEach((button) => {
   button.addEventListener("click", () => {
     const prompt = button.dataset.prompt || "";
@@ -1063,6 +1225,9 @@ queryInput.addEventListener("keydown", (event) => {
   }
 });
 orgSelector.addEventListener("change", switchOrganization);
+tabWorkspace.addEventListener("click", () => switchView("workspace"));
+tabSettings.addEventListener("click", () => switchView("settings"));
+document.getElementById("llm-callout-open-settings")?.addEventListener("click", () => openLlmProvidersSettings());
 inviteForm.addEventListener("submit", createInvite);
 settingsForm.addEventListener("submit", saveSettings);
 jiraForm.addEventListener("submit", (event) => {
@@ -1086,20 +1251,176 @@ disconnectJiraAuthButton.addEventListener("click", () => {
   void disconnectProviderAuth("jira");
 });
 
+for (const provider of LLM_PROVIDERS) {
+  const dom = llmDom[provider];
+  if (dom.save) dom.save.addEventListener("click", () => void saveLlmKeyFromSettings(provider));
+  if (dom.remove) dom.remove.addEventListener("click", () => void removeLlmKey(provider));
+}
+
 renderEmptyResponse(
   "Start with a teammate question",
   "Try one of the example prompts to see Jira assignments, GitHub activity, and caveats in one grounded view."
 );
 
+// ── Model select (query form) ─────────────────────────────────────────────────
+
+const modelSelect = document.getElementById("model-select");
+const responseModelBadge = document.getElementById("response-model-badge");
+
+const CHAT_MODEL_STORAGE_KEY = "tam_selected_model";
+
+/**
+ * Static catalogue of well-known models shown immediately on load.
+ * The live /api/llm/models endpoint can extend/override this list once
+ * API keys are configured, but the user never sees a "Loading…" placeholder.
+ */
+const BUILTIN_MODELS = [
+  // ── Local (Ollama) ────────────────────────────────────────────────────────
+  { id: "",                      provider: "local", displayName: "Ollama (default)",   isDefaultCandidate: false },
+  { id: "local:qwen2.5:7b",      provider: "local", displayName: "Qwen 2.5 · 7B",     isDefaultCandidate: false },
+  { id: "local:qwen2.5:14b",     provider: "local", displayName: "Qwen 2.5 · 14B",    isDefaultCandidate: false },
+  { id: "local:llama3.2:latest", provider: "local", displayName: "Llama 3.2",         isDefaultCandidate: false },
+  { id: "local:mistral:latest",  provider: "local", displayName: "Mistral 7B",        isDefaultCandidate: false },
+  // ── Anthropic ─────────────────────────────────────────────────────────────
+  { id: "claude:claude-opus-4-6-20250514",   provider: "claude", displayName: "Claude Opus 4.6",   isDefaultCandidate: true  },
+  { id: "claude:claude-sonnet-4-6-20250514", provider: "claude", displayName: "Claude Sonnet 4.6", isDefaultCandidate: false },
+  { id: "claude:claude-haiku-4-5-20251001",  provider: "claude", displayName: "Claude Haiku 4.5",  isDefaultCandidate: false },
+  // ── OpenAI ────────────────────────────────────────────────────────────────
+  { id: "openai:gpt-4o",        provider: "openai", displayName: "GPT-4o",       isDefaultCandidate: false },
+  { id: "openai:gpt-4o-mini",   provider: "openai", displayName: "GPT-4o mini",  isDefaultCandidate: false },
+  { id: "openai:o3",            provider: "openai", displayName: "o3",            isDefaultCandidate: false },
+  { id: "openai:o4-mini",       provider: "openai", displayName: "o4-mini",       isDefaultCandidate: false },
+  { id: "openai:gpt-4-turbo",   provider: "openai", displayName: "GPT-4 Turbo",  isDefaultCandidate: false },
+  { id: "openai:gpt-3.5-turbo", provider: "openai", displayName: "GPT-3.5 Turbo",isDefaultCandidate: false },
+  // ── Google Gemini ─────────────────────────────────────────────────────────
+  { id: "gemini:models/gemini-2.0-flash-001",          provider: "gemini", displayName: "Gemini 2.0 Flash",  isDefaultCandidate: false },
+  { id: "gemini:models/gemini-2.5-pro-preview-05-06",  provider: "gemini", displayName: "Gemini 2.5 Pro",   isDefaultCandidate: false },
+  { id: "gemini:models/gemini-1.5-pro-002",            provider: "gemini", displayName: "Gemini 1.5 Pro",   isDefaultCandidate: false },
+  { id: "gemini:models/gemini-1.5-flash-002",          provider: "gemini", displayName: "Gemini 1.5 Flash", isDefaultCandidate: false },
+];
+
+/** Models list, kept in sync by loadChatModels; also used in renderQueryResponse */
+let chatModels = [];
+
+function providerLabel(provider) {
+  const labels = { local: "Local", openai: "OpenAI", claude: "Anthropic", gemini: "Google" };
+  return labels[provider] ?? provider;
+}
+
+function populateModelDropdown(models) {
+  chatModels = models;
+
+  // Restore saved selection, or pick best default
+  const saved = localStorage.getItem(CHAT_MODEL_STORAGE_KEY);
+  const savedExists = models.some((m) => m.id === saved);
+  const defaultModel =
+    (savedExists ? saved : null) ??
+    models.find((m) => m.isDefaultCandidate)?.id ??
+    "";
+
+  // Separate local from cloud providers
+  const localModels = models.filter((m) => m.provider === "local");
+  const cloudModels = models.filter((m) => m.provider !== "local");
+
+  const byProvider = {};
+  for (const m of cloudModels) {
+    if (!byProvider[m.provider]) byProvider[m.provider] = [];
+    byProvider[m.provider].push(m);
+  }
+
+  const providerOrder = ["claude", "openai", "gemini"];
+  const sortedProviders = Object.keys(byProvider).sort(
+    (a, b) => (providerOrder.indexOf(a) ?? 99) - (providerOrder.indexOf(b) ?? 99)
+  );
+
+  // Local group first
+  let html = `<optgroup label="${escapeHtml(providerLabel("local"))}">`;
+  for (const m of localModels) {
+    const sel = m.id === defaultModel ? " selected" : "";
+    html += `<option value="${escapeHtml(m.id)}"${sel}>${escapeHtml(m.displayName)}</option>`;
+  }
+  html += "</optgroup>";
+
+  // Cloud provider groups — indicate when no API key has been added
+  const connectedProviders = new Set(llmProviderKeys.map((k) => k.provider));
+  for (const prov of sortedProviders) {
+    const connected = connectedProviders.has(prov);
+    const groupLabel = connected
+      ? providerLabel(prov)
+      : `${providerLabel(prov)} (add key to use)`;
+    html += `<optgroup label="${escapeHtml(groupLabel)}">`;
+    for (const m of byProvider[prov]) {
+      const sel = m.id === defaultModel ? " selected" : "";
+      html += `<option value="${escapeHtml(m.id)}"${sel}>${escapeHtml(m.displayName)}</option>`;
+    }
+    html += "</optgroup>";
+  }
+
+  modelSelect.innerHTML = html;
+  modelSelect.disabled = false;
+  modelSelect.value = defaultModel;
+
+  if (defaultModel) localStorage.setItem(CHAT_MODEL_STORAGE_KEY, defaultModel);
+}
+
+async function loadChatModels() {
+  // Populate immediately from the built-in catalogue — no loading placeholder.
+  populateModelDropdown(BUILTIN_MODELS);
+
+  // Refresh in the background with live models from configured API keys.
+  // For providers that have live data, replace their builtin entries.
+  try {
+    const payload = await api("/api/llm/models");
+    if (payload.models && payload.models.length > 0) {
+      const liveProviders = new Set(payload.models.map((m) => m.provider));
+      const keptBuiltins = BUILTIN_MODELS.filter(
+        (m) => m.provider === "local" || !liveProviders.has(m.provider)
+      );
+      populateModelDropdown([...keptBuiltins, ...payload.models]);
+    }
+  } catch {
+    // Live fetch failed — builtin list is fine.
+  }
+}
+
+function handleModelSelectChange() {
+  const modelId = modelSelect.value;
+  if (modelId) localStorage.setItem(CHAT_MODEL_STORAGE_KEY, modelId);
+
+  // Warn immediately if a cloud model is selected but no API key is connected.
+  if (modelId && !modelId.startsWith("local:")) {
+    const provider = modelId.split(":")[0];
+    const hasKey = llmProviderKeys.some((k) => k.provider === provider);
+    if (!hasKey) {
+      setBanner(
+        `Add your API key in Settings first\n${providerLabel(provider)} key is not saved yet. Open Settings → LLM providers, paste and Save key, then pick this model again. Until then, queries use Qwen 2.5 7B (local).`,
+        "warning",
+        "api-key"
+      );
+    } else if (banner.classList.contains("dashboard-banner--api-key")) {
+      setBanner("");
+    }
+    return;
+  }
+
+  if (banner.classList.contains("dashboard-banner--api-key")) {
+    setBanner("");
+  }
+}
+
+modelSelect.addEventListener("change", handleModelSelectChange);
+
 Promise.resolve()
   .then(loadSession)
-  .then(loadWorkspaceData)
+  .then(async () => {
+    try {
+      await loadWorkspaceData();
+    } catch {
+      /* workspace data is non-critical; tabs still work */
+    }
+  })
+  .then(loadChatModels)
   .then(applyProviderAuthStatusFromLocation)
   .catch((error) => {
-    setBanner(error instanceof Error ? error.message : "Dashboard failed to load.", "error");
-    renderEmptyResponse(
-      "Dashboard failed to load",
-      error instanceof Error ? error.message : "Unexpected error."
-    );
-    setStatus("Error", "error");
+    setBanner(error instanceof Error ? error.message : "Could not load session.", "error");
   });

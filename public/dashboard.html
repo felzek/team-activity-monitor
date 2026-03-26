@@ -32,14 +32,38 @@
       </div>
     </header>
 
-    <main class="dashboard-grid modern-dashboard">
+    <main class="dashboard-grid modern-dashboard" data-view="workspace">
+      <section class="dashboard-panel api-key-callout-banner view-workspace" aria-label="Cloud LLM API key reminder">
+        <div class="api-key-callout api-key-callout--top" role="status" aria-live="polite">
+          <div class="api-key-callout-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+            </svg>
+          </div>
+          <div class="api-key-callout-body">
+            <p class="api-key-callout-title">Add your API key in Settings first</p>
+            <p class="api-key-callout-text">
+              Cloud models only work after you save a key under <strong>Settings → LLM providers</strong> (paste into the matching provider and click <strong>Save key</strong>).
+              Use <strong>Set up key</strong> in Connect a model provider to jump there, or <strong>Get key</strong> to open the provider site and create a key.
+            </p>
+            <p class="api-key-callout-footnote">Keys are encrypted at rest. OAuth is not available for LLM providers yet.</p>
+            <button type="button" id="llm-callout-open-settings" class="button-primary api-key-callout-cta">
+              Open Settings → LLM providers
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="dashboard-panel workspace-panel">
         <div class="panel-header">
           <div>
             <p class="eyebrow">Current workspace</p>
             <h2 id="org-name">Loading organization...</h2>
           </div>
-          <span id="status-pill" class="status-pill">Ready</span>
+          <div class="view-tabs">
+            <button id="tab-workspace" type="button" class="view-tab is-active">Workspace</button>
+            <button id="tab-settings" type="button" class="view-tab">Settings</button>
+          </div>
         </div>
         <div class="workspace-layout">
           <label class="stacked-field workspace-switch">
@@ -66,20 +90,30 @@
           </div>
           <div class="source-health-grid">
             <article class="source-health-card">
-              <span class="metric-label">Jira connector</span>
-              <strong id="workspace-jira-health">Checking...</strong>
-              <p id="workspace-jira-meta" class="muted-meta">Validating workspace connection state.</p>
+              <span class="metric-label">GitHub sign-in</span>
+              <strong id="user-github-auth">Checking...</strong>
+              <p id="user-github-auth-meta" class="muted-meta">Loading provider auth state.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="connect-github-auth" type="button" class="button-secondary">Connect GitHub</button>
+                <button id="disconnect-github-auth" type="button" class="button-secondary subtle-button hidden">Disconnect</button>
+              </div>
             </article>
             <article class="source-health-card">
-              <span class="metric-label">GitHub connector</span>
-              <strong id="workspace-github-health">Checking...</strong>
-              <p id="workspace-github-meta" class="muted-meta">Validating workspace connection state.</p>
+              <span class="metric-label">Jira sign-in</span>
+              <strong id="user-jira-auth">Checking...</strong>
+              <p id="user-jira-auth-meta" class="muted-meta">Loading provider auth state.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="connect-jira-auth" type="button" class="button-secondary">Connect Jira</button>
+                <button id="disconnect-jira-auth" type="button" class="button-secondary subtle-button hidden">Disconnect</button>
+              </div>
             </article>
           </div>
+
         </div>
       </section>
 
-      <section class="dashboard-panel query-hero-panel">
+      <!-- Workspace view -->
+      <section class="dashboard-panel query-hero-panel view-workspace">
         <div class="query-hero-grid">
           <div class="query-composer">
             <div class="panel-header panel-header-stack">
@@ -100,9 +134,15 @@
                 rows="4"
                 placeholder="What is John working on these days?"
               >What is John working on these days?</textarea>
-              <div class="dashboard-actions">
+              <div class="dashboard-actions query-actions">
+                <select
+                  id="model-select"
+                  class="select-input query-model-select"
+                  aria-label="AI model for this query"
+                >
+                  <option value="">Local model</option>
+                </select>
                 <button type="submit" class="button-primary">Run query</button>
-                <button type="button" id="use-example" class="button-secondary">Rotate example</button>
               </div>
             </form>
             <div class="prompt-bank">
@@ -122,294 +162,342 @@
                 </button>
               </div>
             </div>
+
           </div>
 
-          <aside class="query-sidecard">
-            <p class="eyebrow">AI pipeline</p>
-            <h2>How the answer gets built</h2>
-            <ol class="pipeline-list">
-              <li>Parse the question into teammate, intent, and timeframe.</li>
-              <li>Resolve the teammate from workspace aliases before calling any APIs.</li>
-              <li>Fetch Jira and GitHub independently so partial failures stay visible.</li>
-              <li>Normalize both sources into one grounded response with caveats.</li>
-            </ol>
-            <p class="muted-meta">
-              The summary stays trustworthy because the renderer formats normalized facts instead
-              of inventing activity.
-            </p>
+          <aside class="query-sidecard response-sidecard">
+            <p class="eyebrow">Latest answer</p>
+            <h2 class="sidecard-heading">Grounded response</h2>
+            <p id="last-updated" class="muted-meta">No query has been run yet.</p>
+            <p id="response-model-badge" class="response-model-badge hidden"></p>
+            <div id="banner" class="dashboard-banner hidden"></div>
+            <div id="response-shell" class="response-shell is-empty">
+              <div id="response-empty" class="response-empty">
+                <p class="eyebrow">Ready for a question</p>
+                <h3>Start with a teammate question.</h3>
+                <p>
+                  The response will open with a concise AI summary, then break the evidence into Jira
+                  work, GitHub activity, and caveats.
+                </p>
+              </div>
+              <div id="response-structured" class="response-structured hidden">
+                <div class="summary-hero">
+                  <div class="summary-copy">
+                    <p class="eyebrow">Summary</p>
+                    <h3 id="summary-title">Latest activity summary</h3>
+                    <p id="summary-overview" class="summary-overview">
+                      Run a query to populate the latest activity summary.
+                    </p>
+                  </div>
+                  <div class="summary-kpi-row">
+                    <article class="summary-kpi">
+                      <span class="metric-label">Jira issues</span>
+                      <strong id="summary-jira-issues">0</strong>
+                    </article>
+                    <article class="summary-kpi">
+                      <span class="metric-label">Recent updates</span>
+                      <strong id="summary-jira-updates">0</strong>
+                    </article>
+                    <article class="summary-kpi">
+                      <span class="metric-label">GitHub signals</span>
+                      <strong id="summary-github-signals">0</strong>
+                    </article>
+                    <article class="summary-kpi">
+                      <span class="metric-label">Recent repos</span>
+                      <strong id="summary-repos">0</strong>
+                    </article>
+                  </div>
+                </div>
+
+                <div id="source-status-list" class="source-status-list"></div>
+
+                <div class="results-columns">
+                  <section class="result-block">
+                    <div class="result-block-header">
+                      <div>
+                        <p class="eyebrow">Jira</p>
+                        <h3>Assigned issues and recent updates</h3>
+                      </div>
+                    </div>
+                    <div id="jira-results" class="result-list"></div>
+                  </section>
+
+                  <section class="result-block">
+                    <div class="result-block-header">
+                      <div>
+                        <p class="eyebrow">GitHub</p>
+                        <h3>Commits, pull requests, and repos</h3>
+                      </div>
+                    </div>
+                    <div id="github-results" class="result-list"></div>
+                  </section>
+                </div>
+
+                <section class="result-block caveats-block">
+                  <div class="result-block-header">
+                    <div>
+                      <p class="eyebrow">Caveats</p>
+                      <h3>Confidence and source notes</h3>
+                    </div>
+                  </div>
+                  <ul id="caveats-list" class="caveat-list"></ul>
+                </section>
+
+                <details class="raw-answer">
+                  <summary>Show raw grounded answer</summary>
+                  <pre id="response-text" class="response-text">Run a query to generate an answer.</pre>
+                </details>
+              </div>
+            </div>
           </aside>
         </div>
       </section>
 
-      <section class="dashboard-panel access-panel">
+      <!-- Settings view -->
+      <section id="llm-providers-settings" class="dashboard-panel settings-section view-settings">
         <div class="panel-header">
           <div>
-            <p class="eyebrow">Required personal auth</p>
-            <h2>Connect both providers before querying</h2>
-            <p class="muted-meta">
-              Each signed-in user must link GitHub and Jira before the workspace query API will run.
-            </p>
+            <p class="eyebrow">LLM providers</p>
+            <h2>Manage API keys</h2>
           </div>
         </div>
-        <div class="source-health-grid">
-          <article class="source-health-card">
-            <span class="metric-label">GitHub sign-in</span>
-            <strong id="user-github-auth">Checking...</strong>
-            <p id="user-github-auth-meta" class="muted-meta">Loading provider auth state.</p>
-            <div class="dashboard-actions inline-actions">
-              <button id="connect-github-auth" type="button" class="button-secondary">Connect GitHub</button>
-              <button id="disconnect-github-auth" type="button" class="button-secondary subtle-button hidden">Disconnect</button>
+        <div class="admin-card-content">
+          <div class="api-key-callout api-key-callout--inline" role="status">
+            <div class="api-key-callout-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+              </svg>
             </div>
-          </article>
-          <article class="source-health-card">
-            <span class="metric-label">Jira sign-in</span>
-            <strong id="user-jira-auth">Checking...</strong>
-            <p id="user-jira-auth-meta" class="muted-meta">Loading provider auth state.</p>
-            <div class="dashboard-actions inline-actions">
-              <button id="connect-jira-auth" type="button" class="button-secondary">Connect Jira</button>
-              <button id="disconnect-jira-auth" type="button" class="button-secondary subtle-button hidden">Disconnect</button>
+            <div class="api-key-callout-body">
+              <p class="api-key-callout-title">You are in the right place — save your key here</p>
+              <p class="api-key-callout-text">
+                Paste into the matching provider card below and click <strong>Save key</strong> before using cloud models in Workspace.
+                Longer instructions live under <strong>Workspace → Connect a model provider</strong>.
+              </p>
             </div>
-          </article>
-        </div>
-      </section>
-
-      <section class="dashboard-panel results-panel results-panel-wide">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Latest answer</p>
-            <h2>Grounded response</h2>
           </div>
-          <p id="last-updated" class="muted-meta">No query has been run yet.</p>
-        </div>
-        <div id="banner" class="dashboard-banner hidden"></div>
-        <div id="response-shell" class="response-shell is-empty">
-          <div id="response-empty" class="response-empty">
-            <p class="eyebrow">Ready for a question</p>
-            <h3>Start with a teammate question.</h3>
-            <p>
-              The response will open with a concise AI summary, then break the evidence into Jira
-              work, GitHub activity, and caveats.
-            </p>
-          </div>
-          <div id="response-structured" class="response-structured hidden">
-            <div class="summary-hero">
-              <div class="summary-copy">
-                <p class="eyebrow">Summary</p>
-                <h3 id="summary-title">Latest activity summary</h3>
-                <p id="summary-overview" class="summary-overview">
-                  Run a query to populate the latest activity summary.
-                </p>
+          <p class="muted-meta">Keys are encrypted with AES-256-GCM before being stored. OAuth is not available for LLM providers yet. You can use the free local model (Qwen 2.5 7B via Ollama) without a cloud key.</p>
+          <div class="integration-grid" id="llm-settings-grid">
+            <div class="dashboard-form compact-form connector-form" data-llm-settings="openai">
+              <div class="provider-form-header">
+                <h3>OpenAI</h3>
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" class="get-key-link">Get API key →</a>
               </div>
-              <div class="summary-kpi-row">
-                <article class="summary-kpi">
-                  <span class="metric-label">Jira issues</span>
-                  <strong id="summary-jira-issues">0</strong>
-                </article>
-                <article class="summary-kpi">
-                  <span class="metric-label">Recent updates</span>
-                  <strong id="summary-jira-updates">0</strong>
-                </article>
-                <article class="summary-kpi">
-                  <span class="metric-label">GitHub signals</span>
-                  <strong id="summary-github-signals">0</strong>
-                </article>
-                <article class="summary-kpi">
-                  <span class="metric-label">Recent repos</span>
-                  <strong id="summary-repos">0</strong>
-                </article>
+              <label>
+                <span class="field-label">API key</span>
+                <input id="llm-openai-key-input" type="password" placeholder="sk-..." autocomplete="off" />
+              </label>
+              <ol class="provider-key-steps provider-key-steps-settings">
+                <li><strong>Save the key on this Settings page first:</strong> after you copy a key from OpenAI (next steps), paste it into the field above and click <strong>Save key</strong>—cloud models stay on the local fallback until you do.</li>
+                <li>Sign in at <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">platform.openai.com</a>.</li>
+                <li>Open <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">API keys</a> and click <strong>Create new secret key</strong>.</li>
+                <li>Copy the secret (starts with <code>sk-</code>); paste it into the field below.</li>
+                <li>Click <strong>Save key</strong>. Use <strong>Remove key</strong> to revoke storage in this app (revoke or delete the key on OpenAI if it was exposed).</li>
+              </ol>
+              <p id="llm-openai-settings-status" class="muted-meta">No key saved.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="llm-openai-save" type="button" class="button-secondary">Save key</button>
+                <button id="llm-openai-remove" type="button" class="button-secondary subtle-button hidden">Remove key</button>
               </div>
             </div>
-
-            <div id="source-status-list" class="source-status-list"></div>
-
-            <div class="results-columns">
-              <section class="result-block">
-                <div class="result-block-header">
-                  <div>
-                    <p class="eyebrow">Jira</p>
-                    <h3>Assigned issues and recent updates</h3>
-                  </div>
-                </div>
-                <div id="jira-results" class="result-list"></div>
-              </section>
-
-              <section class="result-block">
-                <div class="result-block-header">
-                  <div>
-                    <p class="eyebrow">GitHub</p>
-                    <h3>Commits, pull requests, and repos</h3>
-                  </div>
-                </div>
-                <div id="github-results" class="result-list"></div>
-              </section>
-            </div>
-
-            <section class="result-block caveats-block">
-              <div class="result-block-header">
-                <div>
-                  <p class="eyebrow">Caveats</p>
-                  <h3>Confidence and source notes</h3>
-                </div>
+            <div class="dashboard-form compact-form connector-form" data-llm-settings="gemini">
+              <div class="provider-form-header">
+                <h3>Google Gemini</h3>
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="get-key-link">Get API key →</a>
               </div>
-              <ul id="caveats-list" class="caveat-list"></ul>
-            </section>
-
-            <details class="raw-answer">
-              <summary>Show raw grounded answer</summary>
-              <pre id="response-text" class="response-text">Run a query to generate an answer.</pre>
-            </details>
+              <label>
+                <span class="field-label">API key</span>
+                <input id="llm-gemini-key-input" type="password" placeholder="AIza..." autocomplete="off" />
+              </label>
+              <ol class="provider-key-steps provider-key-steps-settings">
+                <li><strong>Save the key on this Settings page first:</strong> after you copy a key from Google (next steps), paste it into the field above and click <strong>Save key</strong>—cloud models stay on the local fallback until you do.</li>
+                <li>Sign in at <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.</li>
+                <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">API keys</a> and create a key (pick a Cloud project if asked).</li>
+                <li>Copy the key (starts with <code>AIza</code>); paste it into the field below.</li>
+                <li>Click <strong>Save key</strong>. Remove here if needed; manage or restrict keys in Google Cloud if you rotate them.</li>
+              </ol>
+              <p id="llm-gemini-settings-status" class="muted-meta">No key saved.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="llm-gemini-save" type="button" class="button-secondary">Save key</button>
+                <button id="llm-gemini-remove" type="button" class="button-secondary subtle-button hidden">Remove key</button>
+              </div>
+            </div>
+            <div class="dashboard-form compact-form connector-form" data-llm-settings="claude">
+              <div class="provider-form-header">
+                <h3>Anthropic Claude</h3>
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" class="get-key-link">Get API key →</a>
+              </div>
+              <label>
+                <span class="field-label">API key</span>
+                <input id="llm-claude-key-input" type="password" placeholder="sk-ant-..." autocomplete="off" />
+              </label>
+              <ol class="provider-key-steps provider-key-steps-settings">
+                <li><strong>Save the key on this Settings page first:</strong> after you copy a key from Anthropic (next steps), paste it into the field above and click <strong>Save key</strong>—cloud models stay on the local fallback until you do.</li>
+                <li>Sign in at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">Anthropic Console</a>.</li>
+                <li>Open <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Settings → API keys</a> and click <strong>Create Key</strong>.</li>
+                <li>Copy the key (starts with <code>sk-ant-</code>); paste it into the field below.</li>
+                <li>Click <strong>Save key</strong>. Delete the key in Anthropic Console if you need to rotate after a leak.</li>
+              </ol>
+              <p id="llm-claude-settings-status" class="muted-meta">No key saved.</p>
+              <div class="dashboard-actions inline-actions">
+                <button id="llm-claude-save" type="button" class="button-secondary">Save key</button>
+                <button id="llm-claude-remove" type="button" class="button-secondary subtle-button hidden">Remove key</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="dashboard-panel admin-panel">
+      <section class="dashboard-panel settings-section view-settings">
         <div class="panel-header">
           <div>
-            <p class="eyebrow">Workspace controls</p>
-            <h2>Setup, access, and operations</h2>
-            <p class="muted-meta">
-              These tools stay in the same app, but the core query flow stays front and center.
-            </p>
+            <p class="eyebrow">Workspace setup</p>
+            <h2>Connectors and configuration</h2>
           </div>
         </div>
-        <div class="admin-stack">
-          <details class="admin-card" open>
-            <summary>Workspace setup</summary>
-            <div class="admin-card-content">
-              <div class="integration-grid">
-                <form id="jira-form" class="dashboard-form compact-form connector-form">
-                  <h3>Jira</h3>
-                  <label>
-                    <span class="field-label">Secrets Manager reference</span>
-                    <input id="jira-secret-ref" type="text" placeholder="prod/tam/jira" />
-                  </label>
-                  <label class="toggle-row">
-                    <input id="jira-enabled" type="checkbox" checked />
-                    <span>Enabled for queries</span>
-                  </label>
-                  <button type="submit" class="button-secondary">Save Jira connector</button>
-                  <p id="jira-status" class="muted-meta">Status loading...</p>
-                </form>
+        <div class="admin-card-content">
+          <div class="integration-grid">
+            <form id="jira-form" class="dashboard-form compact-form connector-form">
+              <h3>Jira</h3>
+              <label>
+                <span class="field-label">Secrets Manager reference</span>
+                <input id="jira-secret-ref" type="text" placeholder="prod/tam/jira" />
+              </label>
+              <label class="toggle-row">
+                <input id="jira-enabled" type="checkbox" checked />
+                <span>Enabled for queries</span>
+              </label>
+              <button type="submit" class="button-secondary">Save Jira connector</button>
+              <p id="jira-status" class="muted-meta">Status loading...</p>
+            </form>
 
-                <form id="github-form" class="dashboard-form compact-form connector-form">
-                  <h3>GitHub</h3>
-                  <label>
-                    <span class="field-label">Secrets Manager reference</span>
-                    <input id="github-secret-ref" type="text" placeholder="prod/tam/github" />
-                  </label>
-                  <label class="toggle-row">
-                    <input id="github-enabled" type="checkbox" checked />
-                    <span>Enabled for queries</span>
-                  </label>
-                  <button type="submit" class="button-secondary">Save GitHub connector</button>
-                  <p id="github-status" class="muted-meta">Status loading...</p>
-                </form>
+            <form id="github-form" class="dashboard-form compact-form connector-form">
+              <h3>GitHub</h3>
+              <label>
+                <span class="field-label">Secrets Manager reference</span>
+                <input id="github-secret-ref" type="text" placeholder="prod/tam/github" />
+              </label>
+              <label class="toggle-row">
+                <input id="github-enabled" type="checkbox" checked />
+                <span>Enabled for queries</span>
+              </label>
+              <button type="submit" class="button-secondary">Save GitHub connector</button>
+              <p id="github-status" class="muted-meta">Status loading...</p>
+            </form>
+          </div>
+
+          <form id="settings-form" class="dashboard-form">
+            <label>
+              <span class="field-label">Team members JSON</span>
+              <textarea id="team-members-json" rows="10"></textarea>
+            </label>
+            <label>
+              <span class="field-label">Tracked repos JSON</span>
+              <textarea id="tracked-repos-json" rows="8"></textarea>
+            </label>
+            <button type="submit" class="button-primary">Save workspace settings</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="dashboard-panel settings-section view-settings">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">People and access</p>
+            <h2>Workspace members and invitations</h2>
+          </div>
+        </div>
+        <div class="admin-card-content">
+          <section class="subsection-block">
+            <div class="result-block-header">
+              <div>
+                <p class="eyebrow">Workspace members</p>
+                <h3>Roles and access</h3>
               </div>
-
-              <form id="settings-form" class="dashboard-form">
-                <label>
-                  <span class="field-label">Team members JSON</span>
-                  <textarea id="team-members-json" rows="10"></textarea>
-                </label>
-                <label>
-                  <span class="field-label">Tracked repos JSON</span>
-                  <textarea id="tracked-repos-json" rows="8"></textarea>
-                </label>
-                <button type="submit" class="button-primary">Save workspace settings</button>
-              </form>
             </div>
-          </details>
-
-          <details class="admin-card">
-            <summary>People and access</summary>
-            <div class="admin-card-content">
-              <section class="subsection-block">
-                <div class="result-block-header">
-                  <div>
-                    <p class="eyebrow">Workspace members</p>
-                    <h3>Roles and access</h3>
-                  </div>
-                </div>
-                <div id="members-list" class="data-list">
-                  <p class="history-empty">Members will appear here.</p>
-                </div>
-              </section>
-
-              <section class="subsection-block">
-                <div class="result-block-header">
-                  <div>
-                    <p class="eyebrow">Invite workflow</p>
-                    <h3>Add teammates</h3>
-                  </div>
-                </div>
-                <form id="invite-form" class="dashboard-form compact-form">
-                  <label>
-                    <span class="field-label">Email</span>
-                    <input
-                      id="invite-email"
-                      type="email"
-                      name="email"
-                      placeholder="teammate@example.com"
-                      required
-                    />
-                  </label>
-                  <label>
-                    <span class="field-label">Role</span>
-                    <select id="invite-role" name="role" class="select-input">
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
-                      <option value="support">Support</option>
-                    </select>
-                  </label>
-                  <button type="submit" class="button-primary">Create invite</button>
-                </form>
-                <div id="invite-list" class="data-list">
-                  <p class="history-empty">Recent invitations will appear here.</p>
-                </div>
-              </section>
+            <div id="members-list" class="data-list">
+              <p class="history-empty">Members will appear here.</p>
             </div>
-          </details>
+          </section>
 
-          <details class="admin-card">
-            <summary>History and operations</summary>
-            <div class="admin-card-content">
-              <section class="subsection-block">
-                <div class="result-block-header">
-                  <div>
-                    <p class="eyebrow">Saved history</p>
-                    <h3>Recent queries</h3>
-                  </div>
-                </div>
-                <div id="history-list" class="history-list">
-                  <p class="history-empty">Workspace query history will appear here.</p>
-                </div>
-              </section>
-
-              <section class="subsection-block">
-                <div class="result-block-header">
-                  <div>
-                    <p class="eyebrow">Audit log</p>
-                    <h3>Recent admin events</h3>
-                  </div>
-                </div>
-                <div id="audit-list" class="data-list">
-                  <p class="history-empty">Audit events will appear here.</p>
-                </div>
-              </section>
-
-              <section class="subsection-block">
-                <div class="result-block-header">
-                  <div>
-                    <p class="eyebrow">Background jobs</p>
-                    <h3>Operational queue view</h3>
-                  </div>
-                </div>
-                <div id="jobs-list" class="data-list">
-                  <p class="history-empty">Queued jobs will appear here.</p>
-                </div>
-              </section>
+          <section class="subsection-block">
+            <div class="result-block-header">
+              <div>
+                <p class="eyebrow">Invite workflow</p>
+                <h3>Add teammates</h3>
+              </div>
             </div>
-          </details>
+            <form id="invite-form" class="dashboard-form compact-form">
+              <label>
+                <span class="field-label">Email</span>
+                <input
+                  id="invite-email"
+                  type="email"
+                  name="email"
+                  placeholder="teammate@example.com"
+                  required
+                />
+              </label>
+              <label>
+                <span class="field-label">Role</span>
+                <select id="invite-role" name="role" class="select-input">
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                  <option value="support">Support</option>
+                </select>
+              </label>
+              <button type="submit" class="button-primary">Create invite</button>
+            </form>
+            <div id="invite-list" class="data-list">
+              <p class="history-empty">Recent invitations will appear here.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="dashboard-panel settings-section view-settings">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">History and operations</p>
+            <h2>Queries, audit log, and jobs</h2>
+          </div>
+        </div>
+        <div class="admin-card-content">
+          <section class="subsection-block">
+            <div class="result-block-header">
+              <div>
+                <p class="eyebrow">Saved history</p>
+                <h3>Recent queries</h3>
+              </div>
+            </div>
+            <div id="history-list" class="history-list">
+              <p class="history-empty">Workspace query history will appear here.</p>
+            </div>
+          </section>
+
+          <section class="subsection-block">
+            <div class="result-block-header">
+              <div>
+                <p class="eyebrow">Audit log</p>
+                <h3>Recent admin events</h3>
+              </div>
+            </div>
+            <div id="audit-list" class="data-list">
+              <p class="history-empty">Audit events will appear here.</p>
+            </div>
+          </section>
+
+          <section class="subsection-block">
+            <div class="result-block-header">
+              <div>
+                <p class="eyebrow">Background jobs</p>
+                <h3>Operational queue view</h3>
+              </div>
+            </div>
+            <div id="jobs-list" class="data-list">
+              <p class="history-empty">Queued jobs will appear here.</p>
+            </div>
+          </section>
         </div>
       </section>
     </main>

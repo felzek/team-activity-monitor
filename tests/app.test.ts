@@ -6,6 +6,16 @@ import { initializeDatabase } from "../src/db.js";
 import { logger } from "../src/lib/logger.js";
 import { buildTestConfig, cleanupTestConfig, mockLocalModelResponse } from "./helpers.js";
 
+const ALL_OAUTH_CREDS = {
+  GITHUB_OAUTH_CLIENT_ID: "test-github-cid",
+  GITHUB_OAUTH_CLIENT_SECRET: "test-github-csec",
+  JIRA_OAUTH_CLIENT_ID: "test-jira-cid",
+  JIRA_OAUTH_CLIENT_SECRET: "test-jira-csec",
+  JIRA_BASE_URL: "https://your-domain.atlassian.net",
+  GOOGLE_OAUTH_CLIENT_ID: "test-google-cid",
+  GOOGLE_OAUTH_CLIENT_SECRET: "test-google-csec"
+};
+
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -135,44 +145,75 @@ async function putWithCsrf(
   return agent.put(path).set("x-csrf-token", csrfToken).send(payload);
 }
 
-async function connectProvider(
+async function deleteWithCsrf(
   agent: ReturnType<typeof request.agent>,
-  provider: "github" | "jira"
+  path: string
 ) {
   const csrfToken = await getCsrf(agent);
-  return agent
-    .post(`/api/v1/auth/providers/${provider}/demo-connect`)
-    .set("x-csrf-token", csrfToken)
-    .send({});
+  return agent.delete(path).set("x-csrf-token", csrfToken);
 }
 
-async function signInWithProvider(
+async function connectProviderViaOAuth(
   agent: ReturnType<typeof request.agent>,
-  provider: "github" | "jira",
-  payload: {
-    email: string;
-    name?: string;
-    organizationName?: string;
-  }
+  provider: "github" | "jira" | "google",
+  email?: string
 ) {
-  const csrfToken = await getCsrf(agent);
-  return agent
-    .post(`/api/v1/auth/providers/${provider}/login`)
-    .set("x-csrf-token", csrfToken)
-    .send(payload);
+  const startResponse = await agent.get(`/api/v1/auth/providers/${provider}/start`);
+  expect(startResponse.status).toBe(302);
+
+  const state = extractQueryParam(startResponse.headers.location as string, "state");
+  expect(state).toBeTruthy();
+
+  const resolvedEmail = email ?? `${provider}-user@example.com`;
+  if (provider === "github") {
+    mockGitHubOAuthResponses({ email: resolvedEmail });
+  } else if (provider === "jira") {
+    mockJiraOAuthResponses({ email: resolvedEmail });
+  }
+
+  const callbackResponse = await agent.get(
+    `/api/v1/auth/providers/${provider}/callback?code=test-code&state=${state}`
+  );
+
+  expect(callbackResponse.status).toBe(302);
+  return callbackResponse;
+}
+
+async function signInViaOAuth(
+  agent: ReturnType<typeof request.agent>,
+  provider: "github" | "jira" | "google",
+  email: string,
+  name?: string
+) {
+  const startResponse = await agent.get(`/api/v1/auth/providers/${provider}/start`);
+  expect(startResponse.status).toBe(302);
+
+  const state = extractQueryParam(startResponse.headers.location as string, "state");
+  expect(state).toBeTruthy();
+
+  if (provider === "github") {
+    mockGitHubOAuthResponses({ email, login: email.split("@")[0], name: name ?? "OAuth User" });
+  } else if (provider === "jira") {
+    mockJiraOAuthResponses({ email, name: name ?? "OAuth User", nickname: email.split("@")[0] });
+  }
+
+  const callbackResponse = await agent.get(
+    `/api/v1/auth/providers/${provider}/callback?code=test-code&state=${state}`
+  );
+
+  expect(callbackResponse.status).toBe(302);
+  return callbackResponse;
 }
 
 describe("enterprise api routes", () => {
-  beforeEach(() => {
-    mockLocalModelResponse();
-  });
+  beforeEach(() => {});
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   async function buildAuthenticatedAgent(overrides: Record<string, string | undefined> = {}) {
-    const config = buildTestConfig(overrides);
+    const config = buildTestConfig({ ...ALL_OAUTH_CREDS, ...overrides });
     const database = initializeDatabase(config);
     const app = createApp(config, logger.child({ test: "auth-agent" }), database);
     const agent = request.agent(app);
@@ -220,7 +261,7 @@ describe("enterprise api routes", () => {
 
     const sessionResponse = await agent.get("/api/v1/auth/session");
     expect(sessionResponse.body.providerAuth.providerModes.github).toBe("oauth");
-    expect(sessionResponse.body.providerAuth.providerModes.jira).toBe("demo");
+    expect(sessionResponse.body.providerAuth.providerModes.jira).toBe("unavailable");
 
     const response = await agent.get("/api/v1/auth/providers/github/start");
 
@@ -237,24 +278,37 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
-  it("creates a new account and connects the selected provider from the login page flow", async () => {
+  it("returns an error when provider OAuth is not configured", async () => {
     const config = buildTestConfig();
     const database = initializeDatabase(config);
-    const app = createApp(config, logger.child({ test: "provider-login-new-user" }), database);
+    const app = createApp(config, logger.child({ test: "oauth-not-configured" }), database);
     const agent = request.agent(app);
 
-    const response = await signInWithProvider(agent, "github", {
-      email: "octo@example.com",
-      name: "Octo Example",
-      organizationName: "Octo Ops"
-    });
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+    expect(sessionResponse.body.providerAuth.providerModes.github).toBe("unavailable");
 
-    expect(response.status).toBe(201);
-    expect(response.body.authenticated).toBe(true);
-    expect(response.body.createdAccount).toBe(true);
-    expect(response.body.currentOrganization.name).toBe("Octo Ops");
-    expect(response.body.providerAuth.github.status).toBe("connected");
-    expect(response.body.providerAuth.missingProviders).toEqual(["jira"]);
+    const response = await agent.get("/api/v1/auth/providers/github/start");
+
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toContain("provider_auth=error");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("creates a new account through OAuth sign-in flow", async () => {
+    const config = buildTestConfig(ALL_OAUTH_CREDS);
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "oauth-login" }), database);
+    const agent = request.agent(app);
+
+    await signInViaOAuth(agent, "github", "octo@example.com", "Octo Example");
+
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+    expect(sessionResponse.body.authenticated).toBe(true);
+    expect(sessionResponse.body.user.email).toBe("octo@example.com");
+    expect(sessionResponse.body.providerAuth.github.status).toBe("connected");
+    expect(sessionResponse.body.providerAuth.github.authMethod).toBe("oauth");
 
     const createdUser = database.findUserByEmail("octo@example.com");
     expect(createdUser?.name).toBe("Octo Example");
@@ -263,39 +317,28 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
-  it("signs an existing user in through provider auth without requiring a password", async () => {
-    const config = buildTestConfig();
+  it("signs an existing user in through OAuth without requiring a password", async () => {
+    const config = buildTestConfig(ALL_OAUTH_CREDS);
     const database = initializeDatabase(config);
-    const app = createApp(config, logger.child({ test: "provider-login-existing-user" }), database);
+    const app = createApp(config, logger.child({ test: "oauth-existing" }), database);
     const agent = request.agent(app);
 
-    const registrationResponse = await postWithCsrf(agent, "/api/v1/auth/register", {
+    await postWithCsrf(agent, "/api/v1/auth/register", {
       name: "Existing User",
       email: "existing@example.com",
       password: "supersecurepassword",
       organizationName: "Existing Workspace"
     });
 
-    const organizationId = registrationResponse.body.currentOrganization.id as string;
-    const logoutResponse = await postWithCsrf(agent, "/api/v1/auth/logout", {});
-    expect(logoutResponse.status).toBe(200);
+    await postWithCsrf(agent, "/api/v1/auth/logout", {});
 
-    const providerLoginResponse = await signInWithProvider(agent, "jira", {
-      email: "existing@example.com"
-    });
+    await signInViaOAuth(agent, "jira", "existing@example.com");
 
-    expect(providerLoginResponse.status).toBe(200);
-    expect(providerLoginResponse.body.authenticated).toBe(true);
-    expect(providerLoginResponse.body.createdAccount).toBe(false);
-    expect(providerLoginResponse.body.currentOrganization.id).toBe(organizationId);
-    expect(providerLoginResponse.body.providerAuth.jira.status).toBe("connected");
-
-    const queryBlocked = await postWithCsrf(agent, `/api/v1/orgs/${organizationId}/query`, {
-      query: "What is John working on these days?"
-    });
-
-    expect(queryBlocked.status).toBe(403);
-    expect(queryBlocked.body.providerAuth.missingProviders).toEqual(["github"]);
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+    expect(sessionResponse.body.authenticated).toBe(true);
+    expect(sessionResponse.body.user.email).toBe("existing@example.com");
+    expect(sessionResponse.body.providerAuth.jira.status).toBe("connected");
+    expect(sessionResponse.body.providerAuth.jira.authMethod).toBe("oauth");
 
     database.close();
     cleanupTestConfig(config);
@@ -425,11 +468,14 @@ describe("enterprise api routes", () => {
   it("returns a grounded org-scoped response after both providers are connected", async () => {
     const { config, database, agent, organizationId } = await buildAuthenticatedAgent();
 
-    const githubConnect = await connectProvider(agent, "github");
-    const jiraConnect = await connectProvider(agent, "jira");
+    await connectProviderViaOAuth(agent, "github");
+    await connectProviderViaOAuth(agent, "jira");
 
-    expect(githubConnect.status).toBe(200);
-    expect(jiraConnect.status).toBe(200);
+    mockLocalModelResponse();
+
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+    expect(sessionResponse.body.providerAuth.github.status).toBe("connected");
+    expect(sessionResponse.body.providerAuth.jira.status).toBe("connected");
 
     const response = await postWithCsrf(agent, `/api/v1/orgs/${organizationId}/query`, {
       query: "What is John working on these days?"
@@ -522,6 +568,102 @@ describe("enterprise api routes", () => {
     expect(settingsResponse.status).toBe(200);
     expect(settingsResponse.body.teamMembers.length).toBe(1);
     expect(settingsResponse.body.trackedRepos.length).toBe(1);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("saves, lists, and removes LLM provider API keys", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const saveResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: "sk-test-1234567890abcdef"
+    });
+    expect(saveResponse.status).toBe(200);
+    expect(saveResponse.body.key.provider).toBe("openai");
+    expect(saveResponse.body.key.maskedKey).toContain("••••");
+    expect(saveResponse.body.llmProviderKeys.length).toBe(1);
+
+    const listResponse = await agent.get("/api/v1/auth/llm-keys");
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.items.length).toBe(1);
+    expect(listResponse.body.items[0].provider).toBe("openai");
+
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+    expect(sessionResponse.body.llmProviderKeys.length).toBe(1);
+    expect(sessionResponse.body.llmProviderKeys[0].provider).toBe("openai");
+
+    const updateResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: "sk-updated-key-9876543210xyz"
+    });
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.llmProviderKeys.length).toBe(1);
+
+    const deleteResponse = await deleteWithCsrf(agent, "/api/v1/auth/llm-keys/openai");
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body.removed).toBe(true);
+    expect(deleteResponse.body.llmProviderKeys.length).toBe(0);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("supports multiple LLM providers per user", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", { apiKey: "sk-openai-test12345678" });
+    await putWithCsrf(agent, "/api/v1/auth/llm-keys/gemini", { apiKey: "AIzaSyD-gemini-test1234" });
+    await putWithCsrf(agent, "/api/v1/auth/llm-keys/claude", { apiKey: "sk-ant-claude-test12345" });
+
+    const listResponse = await agent.get("/api/v1/auth/llm-keys");
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body.items.length).toBe(3);
+
+    const providers = listResponse.body.items.map((k: { provider: string }) => k.provider).sort();
+    expect(providers).toEqual(["claude", "gemini", "openai"]);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("rejects invalid LLM provider names", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const response = await putWithCsrf(agent, "/api/v1/auth/llm-keys/invalid-provider", {
+      apiKey: "sk-test-1234567890abcdef"
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("INVALID_LLM_PROVIDER");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("rejects empty or too-short API keys", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const emptyResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: ""
+    });
+    expect(emptyResponse.status).toBe(400);
+    expect(emptyResponse.body.code).toBe("MISSING_API_KEY");
+
+    const shortResponse = await putWithCsrf(agent, "/api/v1/auth/llm-keys/openai", {
+      apiKey: "short"
+    });
+    expect(shortResponse.status).toBe(400);
+    expect(shortResponse.body.code).toBe("INVALID_API_KEY");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("returns 404 when removing a non-existent LLM key", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const response = await deleteWithCsrf(agent, "/api/v1/auth/llm-keys/openai");
+    expect(response.status).toBe(404);
+    expect(response.body.code).toBe("LLM_KEY_NOT_FOUND");
 
     database.close();
     cleanupTestConfig(config);

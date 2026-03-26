@@ -7,5 +7,7 @@ declare module "express-session" {
     currentOrganizationId?: string;
     csrfToken?: string;
     providerAuthFlows?: Partial<Record<ProviderAuthProvider, ProviderAuthFlowState>>;
+    demoOrganizationId?: string;
+    demoUserId?: string;
   }
 }
