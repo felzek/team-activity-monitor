@@ -1057,3 +1057,1007 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Intelligence Dashboard
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Top Navigation ───────────────────────────────────────────── */
+
+.intel-topnav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(248, 251, 255, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.intel-topnav-inner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: min(1280px, calc(100vw - 48px));
+  margin: 0 auto;
+  height: 56px;
+}
+
+.intel-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.intel-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.intel-brand-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.intel-brand-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--olive);
+}
+
+.intel-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.intel-nav-link {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  transition: color 0.15s, background 0.15s;
+  text-decoration: none;
+}
+
+.intel-nav-link:hover {
+  color: var(--ink);
+  background: var(--olive-soft);
+}
+
+.intel-nav-link-active {
+  color: var(--olive);
+  background: var(--olive-soft);
+}
+
+.intel-user-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.intel-user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.3;
+}
+
+.intel-user-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.intel-user-org {
+  font-size: 0.75rem;
+}
+
+.intel-btn-sm {
+  padding: 6px 14px !important;
+  font-size: 0.82rem !important;
+  border-radius: 8px !important;
+}
+
+/* ── Page Header ──────────────────────────────────────────────── */
+
+.intel-page-header {
+  width: min(1280px, calc(100vw - 48px));
+  margin: 0 auto;
+  padding: 28px 0 0;
+}
+
+.intel-page-header-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.intel-page-h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin: 6px 0 4px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.intel-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.intel-source-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+  flex-shrink: 0;
+}
+
+.intel-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.intel-source-pill-loading {
+  background: var(--cream);
+  color: var(--muted);
+  border-color: var(--sand);
+}
+
+.intel-source-pill-ok {
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--teal);
+  border-color: rgba(15, 118, 110, 0.2);
+}
+
+.intel-source-pill-off {
+  background: var(--error-soft);
+  color: var(--error);
+  border-color: rgba(180, 35, 79, 0.15);
+}
+
+.intel-source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
+
+/* ── Tab Bar ──────────────────────────────────────────────────── */
+
+.intel-tab-bar {
+  display: flex;
+  gap: 2px;
+  border-bottom: 2px solid var(--line);
+  padding-bottom: 0;
+}
+
+.intel-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: color 0.15s, background 0.15s;
+  bottom: -2px;
+}
+
+.intel-tab:hover {
+  color: var(--ink);
+  background: var(--olive-soft);
+}
+
+.intel-tab-active {
+  color: var(--olive);
+  border-bottom: 2px solid var(--olive);
+}
+
+/* ── Main Content ─────────────────────────────────────────────── */
+
+.intel-main {
+  width: min(1280px, calc(100vw - 48px));
+  margin: 0 auto;
+  padding: 28px 0 64px;
+}
+
+.intel-tab-pane {
+  animation: intel-fadein 0.18s ease;
+}
+
+.intel-tab-pane-hidden {
+  display: none;
+}
+
+@keyframes intel-fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Section ──────────────────────────────────────────────────── */
+
+.intel-section {
+  margin-bottom: 28px;
+}
+
+.intel-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.intel-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--ink);
+}
+
+.intel-section-meta {
+  font-size: 0.82rem;
+}
+
+/* ── KPI Cards Grid ───────────────────────────────────────────── */
+
+.intel-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.intel-kpi-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(20, 32, 51, 0.05);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.intel-kpi-card:hover {
+  box-shadow: 0 6px 24px rgba(20, 32, 51, 0.1);
+  transform: translateY(-1px);
+}
+
+.intel-kpi-primary {
+  border-left: 3px solid var(--olive);
+}
+
+.intel-kpi-accent {
+  border-left: 3px solid var(--teal);
+}
+
+.intel-kpi-muted {
+  opacity: 0.6;
+}
+
+.intel-kpi-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.intel-kpi-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.intel-kpi-sub {
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.intel-kpi-disconnected {
+  grid-column: 1 / -1;
+}
+
+/* ── AI Summary Banner ────────────────────────────────────────── */
+
+.intel-ai-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px;
+  background: var(--olive-soft);
+  border-left: 3px solid var(--olive);
+  border-radius: 12px;
+  margin-bottom: 28px;
+  transition: opacity 0.2s;
+}
+
+.intel-ai-banner-muted {
+  opacity: 0.65;
+}
+
+.intel-ai-banner-icon {
+  font-size: 1.3rem;
+  color: var(--olive);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.intel-ai-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.intel-ai-banner-label {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--olive);
+}
+
+.intel-ai-banner-text {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.intel-ai-banner-refresh {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  color: var(--olive);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.intel-ai-banner-refresh:hover {
+  background: rgba(19, 59, 99, 0.08);
+  transform: rotate(30deg);
+}
+
+/* ── Source Header Card ───────────────────────────────────────── */
+
+.intel-source-header {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(20, 32, 51, 0.05);
+}
+
+.intel-source-header-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.intel-source-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.intel-github-logo {
+  background: #24292f;
+  color: white;
+}
+
+.intel-jira-logo {
+  background: #0052cc;
+  color: white;
+}
+
+.intel-source-header-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  margin: 0 0 2px;
+  color: var(--ink);
+}
+
+.intel-source-header-meta {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.intel-source-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Sub-tabs ─────────────────────────────────────────────────── */
+
+.intel-subtab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0;
+}
+
+.intel-subtab {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: color 0.15s, background 0.15s;
+  position: relative;
+  bottom: -1px;
+}
+
+.intel-subtab:hover {
+  color: var(--ink);
+  background: var(--olive-soft);
+}
+
+.intel-subtab-active {
+  color: var(--olive);
+  border-bottom: 2px solid var(--olive);
+}
+
+.intel-subtab-pane {
+  animation: intel-fadein 0.15s ease;
+}
+
+.intel-subtab-pane-hidden {
+  display: none;
+}
+
+/* ── Data Table ───────────────────────────────────────────────── */
+
+.intel-table-wrap {
+  min-height: 80px;
+}
+
+.intel-table-scroll {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.intel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.intel-table thead {
+  background: rgba(20, 32, 51, 0.03);
+}
+
+.intel-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.intel-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(20, 32, 51, 0.05);
+  vertical-align: middle;
+  max-width: 360px;
+}
+
+.intel-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.intel-table tbody tr:hover td {
+  background: var(--olive-soft);
+}
+
+.intel-sha {
+  font-family: "SF Mono", "Fira Mono", "Consolas", monospace;
+  font-size: 0.82rem;
+  background: rgba(20, 32, 51, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.intel-repo-name {
+  font-family: "SF Mono", "Fira Mono", "Consolas", monospace;
+  font-size: 0.82rem;
+  color: var(--olive);
+  white-space: nowrap;
+}
+
+.intel-commit-msg,
+.intel-pr-title,
+.intel-issue-summary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 380px;
+}
+
+.intel-pr-num,
+.intel-issue-key {
+  font-family: "SF Mono", "Fira Mono", "Consolas", monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--olive);
+  white-space: nowrap;
+}
+
+.intel-project-key {
+  font-family: "SF Mono", "Fira Mono", "Consolas", monospace;
+  font-size: 0.9rem;
+  color: var(--olive);
+}
+
+.intel-link {
+  color: var(--olive);
+  text-decoration: underline;
+  text-decoration-color: rgba(19, 59, 99, 0.3);
+  text-underline-offset: 2px;
+}
+
+.intel-link:hover {
+  color: var(--teal);
+}
+
+/* ── Badges ───────────────────────────────────────────────────── */
+
+.intel-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.intel-badge-todo {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.intel-badge-inprogress {
+  background: var(--olive-soft);
+  color: var(--olive);
+}
+
+.intel-badge-done {
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--teal);
+}
+
+.intel-badge-unknown {
+  background: var(--cream);
+  color: var(--muted);
+}
+
+.intel-badge-open {
+  background: var(--olive-soft);
+  color: var(--olive);
+}
+
+.intel-badge-connected {
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--teal);
+}
+
+.intel-badge-disconnected {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.intel-badge-priority {
+  background: var(--cream);
+  color: var(--muted);
+}
+
+.intel-badge-priority-critical {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.intel-badge-priority-high {
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.intel-badge-priority-low {
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--teal);
+}
+
+/* ── Activity Feed ────────────────────────────────────────────── */
+
+.intel-activity-feed {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.intel-activity-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(20, 32, 51, 0.05);
+  transition: background 0.12s;
+}
+
+.intel-activity-item:last-child {
+  border-bottom: none;
+}
+
+.intel-activity-item:hover {
+  background: var(--olive-soft);
+}
+
+.intel-activity-github .intel-activity-icon {
+  color: #24292f;
+}
+
+.intel-activity-jira .intel-activity-icon {
+  color: #0052cc;
+}
+
+.intel-activity-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--cream);
+  flex-shrink: 0;
+}
+
+.intel-activity-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intel-activity-label {
+  font-family: "SF Mono", "Fira Mono", "Consolas", monospace;
+  font-size: 0.72rem;
+  background: rgba(20, 32, 51, 0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.intel-activity-sub {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intel-activity-body {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.intel-activity-ts {
+  font-size: 0.78rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Source Pair Grid (Overview) ──────────────────────────────── */
+
+.intel-source-pair-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.intel-source-status-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 2px 8px rgba(20, 32, 51, 0.05);
+}
+
+.intel-source-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.intel-dot-ok {
+  background: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+.intel-dot-off {
+  background: var(--error);
+  box-shadow: 0 0 0 3px rgba(180, 35, 79, 0.1);
+}
+
+.intel-dot-loading {
+  background: var(--sand);
+  animation: intel-pulse 1.4s ease-in-out infinite;
+}
+
+.intel-source-status-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.intel-source-status-name {
+  margin: 0 0 2px;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.intel-source-status-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intel-source-status-sub {
+  margin: 2px 0 0;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Skeleton Loaders ─────────────────────────────────────────── */
+
+@keyframes intel-pulse {
+  0%, 100% { opacity: 0.75; }
+  50%       { opacity: 0.35; }
+}
+
+.intel-skeleton {
+  background: var(--sand);
+  border-radius: 8px;
+  animation: intel-pulse 1.4s ease-in-out infinite;
+}
+
+.intel-skeleton-kpi {
+  height: 80px;
+  border-radius: 10px;
+}
+
+.intel-skeleton-card {
+  min-height: 80px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.intel-skeleton-card .intel-skeleton {
+  height: 100%;
+  min-height: 80px;
+  border-radius: 0;
+}
+
+.intel-skeleton-table-row {
+  height: 42px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: var(--sand);
+  animation: intel-pulse 1.4s ease-in-out infinite;
+}
+
+.intel-skeleton-feed-item {
+  height: 54px;
+  border-bottom: 1px solid rgba(20, 32, 51, 0.05);
+  background: var(--sand);
+  animation: intel-pulse 1.4s ease-in-out infinite;
+}
+
+/* ── Empty / Error / Disconnected States ─────────────────────── */
+
+.intel-empty-state,
+.intel-error-state,
+.intel-disconnected-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  gap: 8px;
+}
+
+.intel-empty-icon,
+.intel-disconnected-icon {
+  font-size: 2rem;
+  color: var(--sand);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.intel-error-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--error-soft);
+  color: var(--error);
+  font-weight: 800;
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+}
+
+.intel-empty-title,
+.intel-error-title,
+.intel-disconnected-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.intel-empty-desc,
+.intel-error-detail,
+.intel-disconnected-desc {
+  margin: 0;
+  font-size: 0.88rem;
+  max-width: 380px;
+}
+
+.intel-empty-action {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+}
+
+/* ── Caveat Strip ─────────────────────────────────────────────── */
+
+.intel-caveats {
+  margin: 0 0 16px;
+}
+
+.intel-caveat {
+  margin: 0 0 6px;
+  padding: 8px 14px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* ── Global Error ─────────────────────────────────────────────── */
+
+.intel-global-error {
+  text-align: center;
+  padding: 64px 24px;
+}
+
+.intel-global-error-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .intel-kpi-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .intel-page-header-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .intel-source-status-row {
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .intel-topnav-inner {
+    width: calc(100vw - 24px);
+    flex-wrap: wrap;
+    height: auto;
+    padding: 12px 0;
+  }
+  .intel-nav-links {
+    order: 3;
+    flex: unset;
+  }
+  .intel-page-header,
+  .intel-main {
+    width: calc(100vw - 24px);
+  }
+  .intel-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .intel-source-pair-grid {
+    grid-template-columns: 1fr;
+  }
+  .intel-activity-item {
+    grid-template-columns: 28px 1fr;
+  }
+  .intel-activity-ts {
+    display: none;
+  }
+  .intel-source-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .intel-user-info {
+    display: none;
+  }
+}

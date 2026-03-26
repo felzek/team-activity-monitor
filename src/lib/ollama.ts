@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import type { AppConfig } from "../config.js";
 import { AppError, toErrorMessage } from "./errors.js";
 import type { ActivitySummary } from "../types/activity.js";
+import type { GitHubDashboardData, JiraDashboardData } from "../types/dashboard.js";
 
 const RESPONSE_SYSTEM_PROMPT = `You are a delivery-focused team activity assistant.
 You must answer only from the provided normalized activity JSON.
@@ -43,6 +44,85 @@ export function buildGroundedResponsePrompt(summary: ActivitySummary): string {
 
 function modelNotReachableMessage(config: AppConfig): string {
   return `Local model generation is unavailable. Start Ollama and ensure ${config.ollamaModel} is available at ${config.ollamaBaseUrl}.`;
+}
+
+function buildDashboardInsightPrompt(
+  github: GitHubDashboardData | null,
+  jira: JiraDashboardData | null
+): string {
+  const parts: string[] = [
+    "Generate exactly ONE sentence (under 35 words) summarizing the team's recent work based only on the following numbers.",
+    "Never invent data. Focus on the most notable signal.",
+    ""
+  ];
+
+  if (github?.health.connected) {
+    parts.push(
+      `GitHub (last 7 days): ${github.metrics.totalCommits} commits, ${github.metrics.openPRs} open PRs, ${github.metrics.activeRepos} active repos out of ${github.metrics.trackedRepos} tracked.`
+    );
+    const topRepo = [...github.repoStats].sort((a, b) => b.commitCount - a.commitCount)[0];
+    if (topRepo && topRepo.commitCount > 0) {
+      parts.push(`Most active repo: ${topRepo.fullName} with ${topRepo.commitCount} commits.`);
+    }
+  }
+
+  if (jira?.health.connected) {
+    parts.push(
+      `Jira: ${jira.metrics.openIssues} open issues, ${jira.metrics.inProgress} in progress, ${jira.metrics.recentlyUpdated} updated in the last 7 days across ${jira.metrics.projects} projects.`
+    );
+  }
+
+  if (!github?.health.connected && !jira?.health.connected) {
+    parts.push("No sources are connected.");
+  }
+
+  return parts.join("\n");
+}
+
+export async function generateDashboardInsight(
+  config: AppConfig,
+  github: GitHubDashboardData | null,
+  jira: JiraDashboardData | null,
+  logger: Logger
+): Promise<string | null> {
+  try {
+    const response = await fetch(ollamaUrl(config.ollamaBaseUrl, "chat"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: config.ollamaModel,
+        stream: false,
+        keep_alive: config.ollamaKeepAlive,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a concise team activity assistant. Output only the requested single sentence. No preamble, no follow-up."
+          },
+          {
+            role: "user",
+            content: buildDashboardInsightPrompt(github, jira)
+          }
+        ]
+      })
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as OllamaChatResponse;
+
+    if (!response.ok) {
+      logger.warn(
+        { statusCode: response.status },
+        "Dashboard insight request returned non-OK status"
+      );
+      return null;
+    }
+
+    const content = payload.message?.content?.trim();
+    return content || null;
+  } catch (error) {
+    logger.warn({ error: toErrorMessage(error) }, "Dashboard insight generation failed");
+    return null;
+  }
 }
 
 export async function generateGroundedResponse(
