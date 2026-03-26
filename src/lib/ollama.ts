@@ -4,7 +4,7 @@ import type { AppConfig } from "../config.js";
 import { AppError, toErrorMessage } from "./errors.js";
 import type { ActivitySummary } from "../types/activity.js";
 
-const RESPONSE_SYSTEM_PROMPT = `You are a delivery-focused team activity assistant.
+export const RESPONSE_SYSTEM_PROMPT = `You are a delivery-focused team activity assistant.
 You must answer only from the provided normalized activity JSON.
 Never invent issues, pull requests, commits, repositories, or dates.
 If a source failed, say so plainly.
@@ -41,15 +41,17 @@ export function buildGroundedResponsePrompt(summary: ActivitySummary): string {
   ].join("\n");
 }
 
-function modelNotReachableMessage(config: AppConfig): string {
-  return `Local model generation is unavailable. Start Ollama and ensure ${config.ollamaModel} is available at ${config.ollamaBaseUrl}.`;
+function modelNotReadyMessage(modelName: string): string {
+  return `Your current model (${modelName}) isn't ready yet. Start Ollama if it's stopped, wait for the model to finish loading, or switch to a cloud model in Settings → LLM providers.`;
 }
 
 export async function generateGroundedResponse(
   config: AppConfig,
   summary: ActivitySummary,
-  logger: Logger
+  logger: Logger,
+  modelOverride?: string
 ): Promise<string> {
+  const modelName = modelOverride ?? config.ollamaModel;
   try {
     const response = await fetch(ollamaUrl(config.ollamaBaseUrl, "chat"), {
       method: "POST",
@@ -57,7 +59,7 @@ export async function generateGroundedResponse(
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: config.ollamaModel,
+        model: modelName,
         stream: false,
         keep_alive: config.ollamaKeepAlive,
         messages: [
@@ -77,8 +79,10 @@ export async function generateGroundedResponse(
 
     if (!response.ok) {
       throw new AppError(
-        payload.error ||
-          `Ollama request failed with status ${response.status}. Confirm the model is installed and the Ollama server is running.`,
+        response.status === 404
+          ? modelNotReadyMessage(modelName)
+          : payload.error ||
+            `Ollama request failed with status ${response.status}. Confirm the model is installed and the Ollama server is running.`,
         {
           code: response.status === 404 ? "OLLAMA_MODEL_MISSING" : "OLLAMA_REQUEST_FAILED",
           statusCode: 503
@@ -96,7 +100,7 @@ export async function generateGroundedResponse(
 
     logger.info(
       {
-        ollamaModel: config.ollamaModel,
+        ollamaModel: modelName,
         totalDurationMs: payload.total_duration
           ? Math.round(payload.total_duration / 1_000_000)
           : undefined,
@@ -119,12 +123,12 @@ export async function generateGroundedResponse(
       {
         error: toErrorMessage(error),
         ollamaBaseUrl: config.ollamaBaseUrl,
-        ollamaModel: config.ollamaModel
+        ollamaModel: modelName
       },
       "Local model request failed"
     );
 
-    throw new AppError(modelNotReachableMessage(config), {
+    throw new AppError(modelNotReadyMessage(modelName), {
       code: "OLLAMA_UNAVAILABLE",
       statusCode: 503,
       cause: error

@@ -27,6 +27,27 @@
     </header>
 
     <main class="dashboard-grid modern-dashboard" data-view="workspace">
+      <section class="dashboard-panel api-key-callout-banner view-workspace" aria-label="Cloud LLM API key reminder">
+        <div class="api-key-callout api-key-callout--top" role="status" aria-live="polite">
+          <div class="api-key-callout-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+            </svg>
+          </div>
+          <div class="api-key-callout-body">
+            <p class="api-key-callout-title">Add your API key in Settings first</p>
+            <p class="api-key-callout-text">
+              Cloud models only work after you save a key under <strong>Settings → LLM providers</strong> (paste into the matching provider and click <strong>Save key</strong>).
+              Use <strong>Set up key</strong> in Connect a model provider to jump there, or <strong>Get key</strong> to open the provider site and create a key.
+            </p>
+            <p class="api-key-callout-footnote">Keys are encrypted at rest. OAuth is not available for LLM providers yet.</p>
+            <button type="button" id="llm-callout-open-settings" class="button-primary api-key-callout-cta">
+              Open Settings → LLM providers
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="dashboard-panel workspace-panel">
         <div class="panel-header">
           <div>
@@ -107,7 +128,14 @@
                 rows="4"
                 placeholder="What is John working on these days?"
               >What is John working on these days?</textarea>
-              <div class="dashboard-actions">
+              <div class="dashboard-actions query-actions">
+                <select
+                  id="model-select"
+                  class="select-input query-model-select"
+                  aria-label="AI model for this query"
+                >
+                  <option value="">Local model</option>
+                </select>
                 <button type="submit" class="button-primary">Run query</button>
               </div>
             </form>
@@ -135,6 +163,7 @@
             <p class="eyebrow">Latest answer</p>
             <h2 class="sidecard-heading">Grounded response</h2>
             <p id="last-updated" class="muted-meta">No query has been run yet.</p>
+            <p id="response-model-badge" class="response-model-badge hidden"></p>
             <div id="banner" class="dashboard-banner hidden"></div>
             <div id="response-shell" class="response-shell is-empty">
               <div id="response-empty" class="response-empty">
@@ -218,47 +247,8 @@
         </div>
       </section>
 
-      <section class="dashboard-panel llm-panel view-workspace">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">LLM API Keys</p>
-            <h2>Connect a model provider</h2>
-          </div>
-        </div>
-        <p class="muted-meta" style="margin: 0 0 12px;">Add an API key for a closed-source LLM to enhance query responses. Keys are encrypted at rest.</p>
-        <div class="llm-keys-row" id="llm-keys-grid">
-          <article class="llm-key-card" data-llm="openai">
-            <span class="metric-label">OpenAI</span>
-            <strong id="llm-openai-status">Not connected</strong>
-            <p id="llm-openai-meta" class="muted-meta">GPT models</p>
-            <div class="dashboard-actions inline-actions">
-              <button id="llm-openai-connect" type="button" class="button-secondary">Add key</button>
-              <button id="llm-openai-disconnect" type="button" class="button-secondary subtle-button hidden">Remove</button>
-            </div>
-          </article>
-          <article class="llm-key-card" data-llm="gemini">
-            <span class="metric-label">Google Gemini</span>
-            <strong id="llm-gemini-status">Not connected</strong>
-            <p id="llm-gemini-meta" class="muted-meta">Gemini models</p>
-            <div class="dashboard-actions inline-actions">
-              <button id="llm-gemini-connect" type="button" class="button-secondary">Add key</button>
-              <button id="llm-gemini-disconnect" type="button" class="button-secondary subtle-button hidden">Remove</button>
-            </div>
-          </article>
-          <article class="llm-key-card" data-llm="claude">
-            <span class="metric-label">Anthropic Claude</span>
-            <strong id="llm-claude-status">Not connected</strong>
-            <p id="llm-claude-meta" class="muted-meta">Claude models</p>
-            <div class="dashboard-actions inline-actions">
-              <button id="llm-claude-connect" type="button" class="button-secondary">Add key</button>
-              <button id="llm-claude-disconnect" type="button" class="button-secondary subtle-button hidden">Remove</button>
-            </div>
-          </article>
-        </div>
-      </section>
-
       <!-- Settings view -->
-      <section class="dashboard-panel settings-section view-settings">
+      <section id="llm-providers-settings" class="dashboard-panel settings-section view-settings">
         <div class="panel-header">
           <div>
             <p class="eyebrow">LLM providers</p>
@@ -266,14 +256,38 @@
           </div>
         </div>
         <div class="admin-card-content">
-          <p class="muted-meta">Add, update, or remove API keys for closed-source LLM providers. Keys are encrypted with AES-256-GCM before being stored.</p>
+          <div class="api-key-callout api-key-callout--inline" role="status">
+            <div class="api-key-callout-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+              </svg>
+            </div>
+            <div class="api-key-callout-body">
+              <p class="api-key-callout-title">You are in the right place — save your key here</p>
+              <p class="api-key-callout-text">
+                Paste into the matching provider card below and click <strong>Save key</strong> before using cloud models in Workspace.
+                Longer instructions live under <strong>Workspace → Connect a model provider</strong>.
+              </p>
+            </div>
+          </div>
+          <p class="muted-meta">Keys are encrypted with AES-256-GCM before being stored. OAuth is not available for LLM providers yet. You can use the free local model (Qwen 2.5 7B via Ollama) without a cloud key.</p>
           <div class="integration-grid" id="llm-settings-grid">
             <div class="dashboard-form compact-form connector-form" data-llm-settings="openai">
-              <h3>OpenAI</h3>
+              <div class="provider-form-header">
+                <h3>OpenAI</h3>
+                <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" class="get-key-link">Get API key →</a>
+              </div>
               <label>
                 <span class="field-label">API key</span>
                 <input id="llm-openai-key-input" type="password" placeholder="sk-..." autocomplete="off" />
               </label>
+              <ol class="provider-key-steps provider-key-steps-settings">
+                <li><strong>Save the key on this Settings page first:</strong> after you copy a key from OpenAI (next steps), paste it into the field above and click <strong>Save key</strong>—cloud models stay on the local fallback until you do.</li>
+                <li>Sign in at <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">platform.openai.com</a>.</li>
+                <li>Open <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">API keys</a> and click <strong>Create new secret key</strong>.</li>
+                <li>Copy the secret (starts with <code>sk-</code>); paste it into the field below.</li>
+                <li>Click <strong>Save key</strong>. Use <strong>Remove key</strong> to revoke storage in this app (revoke or delete the key on OpenAI if it was exposed).</li>
+              </ol>
               <p id="llm-openai-settings-status" class="muted-meta">No key saved.</p>
               <div class="dashboard-actions inline-actions">
                 <button id="llm-openai-save" type="button" class="button-secondary">Save key</button>
@@ -281,11 +295,21 @@
               </div>
             </div>
             <div class="dashboard-form compact-form connector-form" data-llm-settings="gemini">
-              <h3>Google Gemini</h3>
+              <div class="provider-form-header">
+                <h3>Google Gemini</h3>
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="get-key-link">Get API key →</a>
+              </div>
               <label>
                 <span class="field-label">API key</span>
                 <input id="llm-gemini-key-input" type="password" placeholder="AIza..." autocomplete="off" />
               </label>
+              <ol class="provider-key-steps provider-key-steps-settings">
+                <li><strong>Save the key on this Settings page first:</strong> after you copy a key from Google (next steps), paste it into the field above and click <strong>Save key</strong>—cloud models stay on the local fallback until you do.</li>
+                <li>Sign in at <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">Google AI Studio</a>.</li>
+                <li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">API keys</a> and create a key (pick a Cloud project if asked).</li>
+                <li>Copy the key (starts with <code>AIza</code>); paste it into the field below.</li>
+                <li>Click <strong>Save key</strong>. Remove here if needed; manage or restrict keys in Google Cloud if you rotate them.</li>
+              </ol>
               <p id="llm-gemini-settings-status" class="muted-meta">No key saved.</p>
               <div class="dashboard-actions inline-actions">
                 <button id="llm-gemini-save" type="button" class="button-secondary">Save key</button>
@@ -293,11 +317,21 @@
               </div>
             </div>
             <div class="dashboard-form compact-form connector-form" data-llm-settings="claude">
-              <h3>Anthropic Claude</h3>
+              <div class="provider-form-header">
+                <h3>Anthropic Claude</h3>
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" class="get-key-link">Get API key →</a>
+              </div>
               <label>
                 <span class="field-label">API key</span>
                 <input id="llm-claude-key-input" type="password" placeholder="sk-ant-..." autocomplete="off" />
               </label>
+              <ol class="provider-key-steps provider-key-steps-settings">
+                <li><strong>Save the key on this Settings page first:</strong> after you copy a key from Anthropic (next steps), paste it into the field above and click <strong>Save key</strong>—cloud models stay on the local fallback until you do.</li>
+                <li>Sign in at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">Anthropic Console</a>.</li>
+                <li>Open <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Settings → API keys</a> and click <strong>Create Key</strong>.</li>
+                <li>Copy the key (starts with <code>sk-ant-</code>); paste it into the field below.</li>
+                <li>Click <strong>Save key</strong>. Delete the key in Anthropic Console if you need to rotate after a leak.</li>
+              </ol>
               <p id="llm-claude-settings-status" class="muted-meta">No key saved.</p>
               <div class="dashboard-actions inline-actions">
                 <button id="llm-claude-save" type="button" class="button-secondary">Save key</button>

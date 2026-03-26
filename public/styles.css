@@ -604,6 +604,7 @@ a {
   margin-bottom: 14px;
   padding: 12px 14px;
   border-radius: 14px;
+  white-space: pre-line;
 }
 
 .dashboard-banner.hidden {
@@ -623,6 +624,163 @@ a {
 .dashboard-banner.error {
   color: var(--error);
   background: var(--error-soft);
+}
+
+/* Sidecard: prominent “add API key” notice (structured title + detail) */
+.dashboard-banner--api-key {
+  white-space: normal;
+  padding: 14px 16px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(19, 59, 99, 0.14);
+  border-left: 4px solid var(--olive);
+  background: linear-gradient(105deg, rgba(228, 238, 252, 0.95) 0%, rgba(255, 243, 207, 0.88) 100%);
+  box-shadow: 0 12px 36px rgba(19, 59, 99, 0.14);
+}
+
+.dashboard-banner--api-key.dashboard-banner.warning {
+  color: var(--ink);
+}
+
+.dashboard-banner-api-key-title {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.dashboard-banner-api-key-detail {
+  display: block;
+  font-weight: 500;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* Workspace / Settings: API key onboarding callout */
+.api-key-callout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin: 0 0 16px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(19, 59, 99, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 44px rgba(20, 32, 51, 0.12);
+  border-left: 4px solid var(--olive);
+}
+
+.api-key-callout::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.api-key-callout {
+  position: relative;
+  overflow: hidden;
+}
+
+.api-key-callout::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+      circle at top left,
+      rgba(19, 59, 99, 0.10),
+      transparent 55%
+    ),
+    radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.07), transparent 60%);
+  opacity: 0.9;
+}
+
+.api-key-callout > * {
+  position: relative;
+  z-index: 1;
+}
+
+.api-key-callout--inline {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  box-shadow: 0 10px 32px rgba(19, 59, 99, 0.09);
+}
+
+.api-key-callout--top {
+  border-radius: 22px;
+  padding: 16px 18px;
+  box-shadow: 0 18px 52px rgba(20, 32, 51, 0.14);
+  border: 1px solid rgba(20, 32, 51, 0.10);
+  border-left: 5px solid var(--olive);
+}
+
+.api-key-callout-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: var(--olive);
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(19, 59, 99, 0.12);
+}
+
+.api-key-callout--inline .api-key-callout-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.api-key-callout-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.api-key-callout-title {
+  margin: 0 0 8px;
+  font-size: 1.06rem;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.api-key-callout-text {
+  margin: 0 0 10px;
+  font-size: 0.93rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.api-key-callout-footnote {
+  margin: 0 0 14px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.api-key-callout-cta {
+  margin: 0;
+  font-size: 0.88rem;
+  padding: 10px 18px;
+}
+
+.api-key-callout--inline .api-key-callout-title {
+  font-size: 0.98rem;
+  margin-bottom: 6px;
+}
+
+.api-key-callout--inline .api-key-callout-text {
+  font-size: 0.86rem;
+  margin-bottom: 0;
 }
 
 .metric-row,
@@ -929,6 +1087,17 @@ a {
   grid-column: 1 / -1;
 }
 
+/* Full-width API key reminder — first row under header (Workspace view only) */
+.api-key-callout-banner {
+  grid-column: 1 / -1;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.api-key-callout-banner .api-key-callout--top {
+  margin: 0;
+}
+
 .llm-keys-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -971,6 +1140,59 @@ a {
 .llm-key-card .button-secondary {
   font-size: 0.82rem;
   padding: 6px 10px;
+}
+
+.provider-quick-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* Numbered instructions for LLM API key setup (workspace cards + Settings) */
+.provider-key-steps {
+  margin: 6px 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.5;
+  list-style-type: decimal;
+}
+
+.provider-key-steps li {
+  margin-bottom: 0.4em;
+}
+
+.provider-key-steps li:last-child {
+  margin-bottom: 0;
+}
+
+.provider-key-steps a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.provider-key-steps a:hover {
+  text-decoration: underline;
+}
+
+.provider-key-steps code {
+  font-size: 0.92em;
+  padding: 0.05em 0.35em;
+  border-radius: 4px;
+  background: rgba(20, 32, 51, 0.06);
+  color: var(--text);
+}
+
+.provider-key-steps-overview {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+}
+
+.provider-key-steps-settings {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
 }
 
 @media (max-width: 900px) {
@@ -1640,3 +1862,91 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Query actions row with inline model selector ────────────────────────────── */
+
+.query-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.query-model-select {
+  flex: 1;
+  max-width: 200px;
+  min-width: 120px;
+  font-size: 13px;
+  padding: 6px 10px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  appearance: auto; /* keep native arrow for accessibility */
+}
+
+.query-model-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  color: var(--text);
+}
+
+/* Model badge shown in response sidecard after a query */
+.response-model-badge {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.response-model-badge::before {
+  content: "✦";
+  font-size: 9px;
+  opacity: 0.6;
+}
+
+/* ── LLM provider form helpers ───────────────────────────────────────────────── */
+
+.provider-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.provider-form-header h3 {
+  margin: 0;
+}
+
+.get-key-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.get-key-link:hover {
+  text-decoration: underline;
+}
+
+.provider-key-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 8px;
+}
+
+.provider-key-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.provider-key-hint a:hover {
+  text-decoration: underline;
+}
+
+

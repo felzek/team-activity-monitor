@@ -27,7 +27,7 @@ import { teamMemberSchema, trackedRepoSchema } from "./config.js";
 import type { AppDatabase } from "./db.js";
 import { AppError, isAppError } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
-import { generateGroundedResponse } from "./lib/ollama.js";
+import { buildGroundedResponsePrompt, generateGroundedResponse, RESPONSE_SYSTEM_PROMPT } from "./lib/ollama.js";
 import {
   applyProviderAuthRuntime,
   buildProviderAuthorizationUrl,
@@ -36,9 +36,15 @@ import {
   getProviderConnectionMode
 } from "./lib/provider-auth.js";
 import { createRateLimitMiddleware } from "./lib/rate-limit.js";
+import { AnthropicAdapter } from "./llm/adapters/anthropic.js";
+import { GeminiAdapter } from "./llm/adapters/gemini.js";
+import { OpenAiAdapter } from "./llm/adapters/openai.js";
+import { LlmProviderRegistry } from "./llm/registry.js";
+import { LlmService } from "./llm/service.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
+import { createLlmRouter } from "./routes/llm.js";
 import type { LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery } from "./types/activity.js";
 
@@ -256,6 +262,13 @@ function providerResultPath(
 
 export function createApp(config: AppConfig, logger: Logger, database: AppDatabase) {
   const app = express();
+
+  // Build the LLM service once so it's accessible to all routes (query + /api/llm/*)
+  const llmRegistry = new LlmProviderRegistry()
+    .register(new AnthropicAdapter())
+    .register(new OpenAiAdapter())
+    .register(new GeminiAdapter());
+  const llmService = new LlmService(llmRegistry, database, logger);
 
   applySecurityHeaders(app);
   app.use(createHttpLogger());
@@ -1335,7 +1348,43 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         );
       }
 
-      const responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
+      // Use the user-selected LLM provider when a modelId is provided; fall back to Ollama otherwise.
+      const requestedModelId =
+        typeof request.body?.modelId === "string" ? request.body.modelId.trim() : "";
+
+      let responseText: string;
+      let modelUsed: string | null = null;
+      let modelWarning: string | null = null;
+
+      if (requestedModelId.startsWith("local:")) {
+        // Specific local Ollama model (e.g. "local:qwen2.5:7b")
+        const localModelName = requestedModelId.slice("local:".length);
+        responseText = await generateGroundedResponse(executionConfig, summary, requestLogger, localModelName);
+        modelUsed = requestedModelId;
+      } else if (requestedModelId) {
+        try {
+          const chatResp = await llmService.chat(request.session.userId!, {
+            modelId: requestedModelId,
+            messages: [
+              { role: "system", content: RESPONSE_SYSTEM_PROMPT },
+              { role: "user", content: buildGroundedResponsePrompt(summary) }
+            ]
+          });
+          responseText = chatResp.message.content;
+          modelUsed = requestedModelId;
+          requestLogger.info({ modelId: requestedModelId }, "Generated grounded response via LLM provider");
+        } catch (llmErr) {
+          const errMsg = llmErr instanceof Error ? llmErr.message : String(llmErr);
+          modelWarning = `${errMsg} Answer generated using Qwen 2.5 7B (local) instead.`;
+          requestLogger.warn(
+            { modelId: requestedModelId, err: errMsg },
+            "LLM provider failed; falling back to Qwen 2.5 7B"
+          );
+          responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
+        }
+      } else {
+        responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
+      }
 
       const queryRun = database.saveQueryRun({
         organizationId: organization.id,
@@ -1363,6 +1412,8 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         parsedQuery: adjustedParsedQuery,
         summary,
         responseText,
+        modelUsed,
+        modelWarning,
         connectorStatus: {
           jira: jiraConnection,
           github: githubConnection
@@ -1377,6 +1428,9 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       });
     }
   );
+
+  // ── LLM chat layer ──────────────────────────────────────────────────────────
+  app.use("/api/llm", createLlmRouter(llmService, logger));
 
   app.use(
     (
