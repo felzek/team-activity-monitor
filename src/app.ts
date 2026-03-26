@@ -315,10 +315,8 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     sendPublicFile(response, "dashboard.html");
   });
 
-
-
-  app.get("/demo", (_request, response) => {
-    sendPublicFile(response, "demo.html");
+  app.get("/intelligence", requireAuthPage, (_request, response) => {
+    sendPublicFile(response, "intelligence.html");
   });
 
   app.get("/docs", (_request, response) => {
@@ -1429,8 +1427,68 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     }
   );
 
-  // ── LLM chat layer ──────────────────────────────────────────────────────────
-  app.use("/api/llm", createLlmRouter(llmService, logger));
+  // ── Dashboard Aggregation Endpoints ──────────────────────────────────────
+
+  app.get(
+    "/api/v1/orgs/:orgId/dashboard/github",
+    requireAuth,
+    requireOrganization(database),
+    async (request, response) => {
+      const organizationId = routeOrganizationId(request)!;
+      const orgSettings = database.getOrganizationSettings(organizationId);
+      const executionConfig = {
+        ...config,
+        teamMembers: orgSettings.teamMembers,
+        trackedRepos: orgSettings.trackedRepos
+      };
+      const data = await fetchGitHubDashboard(
+        executionConfig,
+        orgSettings.teamMembers,
+        orgSettings.trackedRepos,
+        logger
+      );
+      response.json(data);
+    }
+  );
+
+  app.get(
+    "/api/v1/orgs/:orgId/dashboard/jira",
+    requireAuth,
+    requireOrganization(database),
+    async (request, response) => {
+      const organizationId = routeOrganizationId(request)!;
+      const orgSettings = database.getOrganizationSettings(organizationId);
+      const executionConfig = {
+        ...config,
+        teamMembers: orgSettings.teamMembers,
+        trackedRepos: orgSettings.trackedRepos
+      };
+      const data = await fetchJiraDashboard(
+        executionConfig,
+        orgSettings.teamMembers,
+        logger
+      );
+      response.json(data);
+    }
+  );
+
+  app.post(
+    "/api/v1/orgs/:orgId/dashboard/insight",
+    requireAuth,
+    requireOrganization(database),
+    async (request, response) => {
+      const github = (request.body?.github ?? null) as import("./types/dashboard.js").GitHubDashboardData | null;
+      const jira = (request.body?.jira ?? null) as import("./types/dashboard.js").JiraDashboardData | null;
+      const text = await generateDashboardInsight(config, github, jira, logger);
+      response.json({
+        text,
+        generatedAt: new Date().toISOString(),
+        error: text === null ? "AI insight unavailable — ensure Ollama is running." : null
+      });
+    }
+  );
+
+  // ── Error Handler ─────────────────────────────────────────────────────────
 
   app.use(
     (
