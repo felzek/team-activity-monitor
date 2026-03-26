@@ -1,0 +1,45 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "public/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare static site
+        run: |
+          cp -r public site
+          # Fix absolute asset paths so they work under the /team-activity-monitor/ base path.
+          # Absolute href="/..." and src="/..." references break on GitHub Pages subdirectory URLs.
+          find site -name "*.html" | xargs sed -i \
+            -e 's|href="/styles\.css"|href="styles.css"|g' \
+            -e 's|src="/styles\.css"|src="styles.css"|g'
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

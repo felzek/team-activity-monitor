@@ -976,8 +976,10 @@ a {
 
 .response-sidecard .response-empty {
   border: none;
-  padding: 0;
+  padding: 0 4px;
   background: none;
+  max-width: 340px;
+  text-align: center;
 }
 
 .response-sidecard .sidecard-heading {
@@ -1053,6 +1055,30 @@ a {
 
 .query-hero-grid {
   grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  align-items: start; /* each column is its own height — neither forces the other to grow */
+}
+
+/* Sidecard stays sticky so the response is always reachable while scrolling the left column */
+.response-sidecard {
+  position: sticky;
+  top: 20px;
+}
+
+/* Fixed-height scroll box — content changes never shift the layout */
+#response-shell {
+  height: 480px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 32, 51, 0.12) transparent;
+}
+
+/* Center the empty/error state vertically inside the fixed box */
+.response-shell.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .panel-header-stack {
@@ -1795,6 +1821,17 @@ a {
 }
 
 @media (max-width: 1080px) {
+  /* Single-column: sidecard no longer needs to stick, shell flows naturally */
+  .response-sidecard {
+    position: static;
+  }
+
+  #response-shell {
+    height: auto;
+    min-height: 300px;
+    overflow-y: visible;
+  }
+
   .hero-section,
   .feature-grid,
   .steps-grid,
@@ -1892,6 +1929,66 @@ a {
   outline-offset: -1px;
   color: var(--text);
 }
+
+/* ── Skeleton loading animation ──────────────────────────────────────────────── */
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(20, 32, 51, 0.06) 25%,
+    rgba(20, 32, 51, 0.12) 50%,
+    rgba(20, 32, 51, 0.06) 75%
+  );
+  background-size: 1200px 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  border-radius: 6px;
+  display: block;
+}
+
+.skeleton-line {
+  height: 13px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+
+.skeleton-line:last-child { margin-bottom: 0; }
+
+.skeleton-card {
+  display: grid;
+  gap: 0;
+  pointer-events: none;
+}
+
+/* ── AI response block ───────────────────────────────────────────────────────── */
+
+.ai-response-block {
+  border-radius: 18px;
+  border: 1px solid rgba(20, 32, 51, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+  padding: 20px 22px;
+}
+
+.ai-response-block .response-text {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.92rem;
+  line-height: 1.75;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ai-response-skeleton {
+  display: grid;
+  gap: 0;
+}
+
+.ai-response-skeleton.hidden { display: none; }
 
 /* Model badge shown in response sidecard after a query */
 .response-model-badge {

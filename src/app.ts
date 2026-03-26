@@ -25,15 +25,17 @@ import {
 import type { AppConfig } from "./config.js";
 import { teamMemberSchema, trackedRepoSchema } from "./config.js";
 import type { AppDatabase } from "./db.js";
-import { AppError, isAppError } from "./lib/errors.js";
+import { AppError, isAppError, toErrorMessage } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
-import { buildGroundedResponsePrompt, generateGroundedResponse, RESPONSE_SYSTEM_PROMPT } from "./lib/ollama.js";
+import { buildGroundedResponsePrompt, generateGroundedResponse, RESPONSE_SYSTEM_PROMPT } from "./lib/llm-pipeline.js";
+import { syncGitHubProfileToOrg, syncJiraProfileToOrg } from "./lib/profile-sync.js";
 import {
   applyProviderAuthRuntime,
   buildProviderAuthorizationUrl,
   buildProviderAuthFlowState,
   completeProviderAuthorization,
-  getProviderConnectionMode
+  getProviderConnectionMode,
+  refreshJiraToken
 } from "./lib/provider-auth.js";
 import { createRateLimitMiddleware } from "./lib/rate-limit.js";
 import { AnthropicAdapter } from "./llm/adapters/anthropic.js";
@@ -46,7 +48,7 @@ import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
 import { createLlmRouter } from "./routes/llm.js";
 import type { LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
-import type { ParsedQuery } from "./types/activity.js";
+import type { ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
 
@@ -136,6 +138,34 @@ function filteredParsedQuery(
 
       return true;
     })
+  };
+}
+
+function buildWorkspaceProviderIntegration(
+  label: "Jira" | "GitHub",
+  workspaceEnabled: boolean,
+  originallyRequested: boolean,
+  queryIncluded: boolean,
+  credentialPresent: boolean
+): ProviderIntegrationContext {
+  let explanation: string;
+  if (!originallyRequested) {
+    explanation = `${label} was not in scope for this query intent.`;
+  } else if (!workspaceEnabled) {
+    explanation = `${label} is not connected for this workspace — the connector is disabled, so no ${label} data was fetched.`;
+  } else if (!queryIncluded) {
+    explanation = `${label} was expected but was not included for this query (workspace connector settings).`;
+  } else if (!credentialPresent) {
+    explanation = `${label} was in scope but no user OAuth token was available for this request; results may be incomplete or rely on server fallback credentials.`;
+  } else {
+    explanation = `${label} is connected for this workspace with a user credential; the JSON status and items reflect the API outcome.`;
+  }
+
+  return {
+    workspaceConnectorEnabled: workspaceEnabled,
+    queryIncludedProvider: queryIncluded,
+    userCredentialPresent: credentialPresent,
+    explanation
   };
 }
 
@@ -258,6 +288,48 @@ function providerResultPath(
   }
 
   return `${basePath}?${search.toString()}`;
+}
+
+// 5-minute buffer: refresh before actual expiry to avoid mid-request failures
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+async function getActiveProviderToken(
+  userId: string,
+  provider: "github" | "jira",
+  config: AppConfig,
+  database: AppDatabase,
+  logger: Logger
+): Promise<string | undefined> {
+  const tokenData = database.getUserProviderToken(userId, provider);
+  if (!tokenData) return undefined;
+
+  if (tokenData.expiresAt) {
+    const expiresAt = new Date(tokenData.expiresAt).getTime();
+
+    if (expiresAt < Date.now() + TOKEN_REFRESH_BUFFER_MS) {
+      if (!tokenData.refreshToken) {
+        logger.warn({ userId, provider }, "Provider token expired — no refresh token stored. User must reconnect.");
+        return undefined;
+      }
+
+      if (provider === "jira") {
+        try {
+          const refreshed = await refreshJiraToken(config, tokenData.refreshToken);
+          database.updateProviderTokens(userId, "jira", refreshed);
+          logger.info({ userId }, "Jira OAuth token refreshed transparently");
+          return refreshed.accessToken;
+        } catch (err) {
+          logger.warn(
+            { userId, error: toErrorMessage(err) },
+            "Jira token refresh failed — proceeding without user token"
+          );
+          return undefined;
+        }
+      }
+    }
+  }
+
+  return tokenData.accessToken;
 }
 
 export function createApp(config: AppConfig, logger: Logger, database: AppDatabase) {
@@ -679,7 +751,10 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         email: identity.email ?? user.email,
         authMethod: "oauth",
         connectedAt: new Date().toISOString(),
-        metadata: identity.metadata
+        metadata: identity.metadata,
+        accessToken: identity.accessToken,
+        refreshToken: identity.refreshToken,
+        tokenExpiresAt: identity.tokenExpiresAt
       });
 
       database.recordAuditEvent({
@@ -694,6 +769,28 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
           connectedFrom: flow.entry
         }
       });
+
+      // Auto-populate org team members and repos from the connected provider profile
+      if (provider === "github" && identity.login) {
+        await syncGitHubProfileToOrg(
+          user.id,
+          organization.id,
+          identity.accessToken,
+          identity.login,
+          identity.displayName,
+          database,
+          logger
+        );
+      } else if (provider === "jira" && identity.externalAccountId) {
+        syncJiraProfileToOrg(
+          user.id,
+          organization.id,
+          identity.externalAccountId,
+          identity.displayName,
+          database,
+          logger
+        );
+      }
 
       response.redirect(
         providerResultPath(
@@ -1331,12 +1428,41 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         "Received organization activity query"
       );
 
+      const [userGitHubToken, userJiraToken] = await Promise.all([
+        getActiveProviderToken(request.session.userId!, "github", config, database, requestLogger),
+        getActiveProviderToken(request.session.userId!, "jira", config, database, requestLogger)
+      ]);
+      const userJiraConnection = database.getUserProviderConnection(request.session.userId!, "jira");
+      const jiraSiteId = userJiraConnection?.metadata?.siteId as string | undefined;
+
       const summary = await buildActivitySummary(
         executionConfig,
         adjustedParsedQuery,
         identity,
-        requestLogger
+        requestLogger,
+        {
+          githubToken: userGitHubToken,
+          jiraToken: userJiraToken,
+          jiraSiteId
+        }
       );
+
+      summary.integration = {
+        jira: buildWorkspaceProviderIntegration(
+          "Jira",
+          jiraConnection.enabled,
+          parsedQuery.requestedSources.includes("jira"),
+          adjustedParsedQuery.requestedSources.includes("jira"),
+          Boolean(userJiraToken)
+        ),
+        github: buildWorkspaceProviderIntegration(
+          "GitHub",
+          githubConnection.enabled,
+          parsedQuery.requestedSources.includes("github"),
+          adjustedParsedQuery.requestedSources.includes("github"),
+          Boolean(userGitHubToken)
+        )
+      };
 
       if (!jiraConnection.enabled && parsedQuery.requestedSources.includes("jira")) {
         summary.caveats.push("Jira is disabled for this organization, so Jira data was skipped.");
@@ -1348,41 +1474,33 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         );
       }
 
-      // Use the user-selected LLM provider when a modelId is provided; fall back to Ollama otherwise.
+      // Route to the provider determined by the model ID prefix.
+      // Cloud model failures propagate as errors — no silent fallback to Ollama.
       const requestedModelId =
         typeof request.body?.modelId === "string" ? request.body.modelId.trim() : "";
 
       let responseText: string;
       let modelUsed: string | null = null;
-      let modelWarning: string | null = null;
 
       if (requestedModelId.startsWith("local:")) {
-        // Specific local Ollama model (e.g. "local:qwen2.5:7b")
+        // Explicit local Ollama model (e.g. "local:qwen2.5:7b")
         const localModelName = requestedModelId.slice("local:".length);
         responseText = await generateGroundedResponse(executionConfig, summary, requestLogger, localModelName);
         modelUsed = requestedModelId;
       } else if (requestedModelId) {
-        try {
-          const chatResp = await llmService.chat(request.session.userId!, {
-            modelId: requestedModelId,
-            messages: [
-              { role: "system", content: RESPONSE_SYSTEM_PROMPT },
-              { role: "user", content: buildGroundedResponsePrompt(summary) }
-            ]
-          });
-          responseText = chatResp.message.content;
-          modelUsed = requestedModelId;
-          requestLogger.info({ modelId: requestedModelId }, "Generated grounded response via LLM provider");
-        } catch (llmErr) {
-          const errMsg = llmErr instanceof Error ? llmErr.message : String(llmErr);
-          modelWarning = `${errMsg} Answer generated using Qwen 2.5 7B (local) instead.`;
-          requestLogger.warn(
-            { modelId: requestedModelId, err: errMsg },
-            "LLM provider failed; falling back to Qwen 2.5 7B"
-          );
-          responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
-        }
+        // Cloud provider model — LlmError propagates to error middleware if unavailable.
+        const chatResp = await llmService.chat(request.session.userId!, {
+          modelId: requestedModelId,
+          messages: [
+            { role: "system", content: RESPONSE_SYSTEM_PROMPT },
+            { role: "user", content: buildGroundedResponsePrompt(summary) }
+          ]
+        });
+        responseText = chatResp.message.content;
+        modelUsed = requestedModelId;
+        requestLogger.info({ modelId: requestedModelId }, "Generated grounded response via LLM provider");
       } else {
+        // No model selected — use local Ollama default.
         responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
       }
 
@@ -1413,7 +1531,6 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         summary,
         responseText,
         modelUsed,
-        modelWarning,
         connectorStatus: {
           jira: jiraConnection,
           github: githubConnection

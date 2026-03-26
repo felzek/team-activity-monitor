@@ -113,6 +113,9 @@ interface UserProviderConnectionRow {
   connected_at: string | null;
   metadata_json: string;
   updated_at: string;
+  encrypted_access_token: string | null;
+  encrypted_refresh_token: string | null;
+  token_expires_at: string | null;
 }
 
 interface LlmProviderKeyRow {
@@ -927,6 +930,9 @@ export class AppDatabase {
       authMethod?: "oauth";
       connectedAt?: string | null;
       metadata?: Record<string, unknown>;
+      accessToken?: string | null;
+      refreshToken?: string | null;
+      tokenExpiresAt?: string | null;
     }
   ): UserProviderConnection {
     const existing = this.getUserProviderConnection(userId, provider);
@@ -952,6 +958,15 @@ export class AppDatabase {
       metadata: input.metadata ?? existing?.metadata ?? {}
     };
 
+    const encryptedAccessToken =
+      input.accessToken != null
+        ? encrypt(input.accessToken, this.defaults.encryptionSecret)
+        : null;
+    const encryptedRefreshToken =
+      input.refreshToken != null
+        ? encrypt(input.refreshToken, this.defaults.encryptionSecret)
+        : null;
+
     this.connection
       .prepare(
         `INSERT INTO user_provider_connections (
@@ -966,10 +981,13 @@ export class AppDatabase {
           auth_method,
           connected_at,
           metadata_json,
+          encrypted_access_token,
+          encrypted_refresh_token,
+          token_expires_at,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, provider) DO UPDATE SET
           status = excluded.status,
           external_account_id = excluded.external_account_id,
@@ -979,6 +997,9 @@ export class AppDatabase {
           auth_method = excluded.auth_method,
           connected_at = excluded.connected_at,
           metadata_json = excluded.metadata_json,
+          encrypted_access_token = COALESCE(excluded.encrypted_access_token, encrypted_access_token),
+          encrypted_refresh_token = COALESCE(excluded.encrypted_refresh_token, encrypted_refresh_token),
+          token_expires_at = COALESCE(excluded.token_expires_at, token_expires_at),
           updated_at = excluded.updated_at`
       )
       .run(
@@ -993,6 +1014,9 @@ export class AppDatabase {
         next.authMethod,
         next.connectedAt,
         JSON.stringify(next.metadata),
+        encryptedAccessToken,
+        encryptedRefreshToken,
+        input.tokenExpiresAt ?? null,
         now,
         now
       );
@@ -1011,8 +1035,66 @@ export class AppDatabase {
       login: null,
       email: null,
       connectedAt: null,
-      metadata: {}
+      metadata: {},
+      accessToken: null,
+      refreshToken: null,
+      tokenExpiresAt: null
     });
+  }
+
+  updateProviderTokens(
+    userId: string,
+    provider: ProviderAuthProvider,
+    tokens: { accessToken: string; refreshToken: string | null; tokenExpiresAt: string | null }
+  ): void {
+    const encryptedAccessToken = encrypt(tokens.accessToken, this.defaults.encryptionSecret);
+    const encryptedRefreshToken = tokens.refreshToken
+      ? encrypt(tokens.refreshToken, this.defaults.encryptionSecret)
+      : null;
+    const now = new Date().toISOString();
+
+    this.connection
+      .prepare(
+        `UPDATE user_provider_connections
+         SET encrypted_access_token = ?,
+             encrypted_refresh_token = COALESCE(?, encrypted_refresh_token),
+             token_expires_at = ?,
+             updated_at = ?
+         WHERE user_id = ? AND provider = ?`
+      )
+      .run(
+        encryptedAccessToken,
+        encryptedRefreshToken,
+        tokens.tokenExpiresAt,
+        now,
+        userId,
+        provider
+      );
+  }
+
+  getUserProviderToken(
+    userId: string,
+    provider: ProviderAuthProvider
+  ): { accessToken: string; refreshToken: string | null; expiresAt: string | null } | null {
+    const row = this.connection
+      .prepare(
+        `SELECT encrypted_access_token, encrypted_refresh_token, token_expires_at
+         FROM user_provider_connections
+         WHERE user_id = ? AND provider = ? AND status = 'connected'`
+      )
+      .get(userId, provider) as
+      | { encrypted_access_token: string | null; encrypted_refresh_token: string | null; token_expires_at: string | null }
+      | undefined;
+
+    if (!row?.encrypted_access_token) return null;
+
+    return {
+      accessToken: decrypt(row.encrypted_access_token, this.defaults.encryptionSecret),
+      refreshToken: row.encrypted_refresh_token
+        ? decrypt(row.encrypted_refresh_token, this.defaults.encryptionSecret)
+        : null,
+      expiresAt: row.token_expires_at ?? null
+    };
   }
 
   listLlmProviderKeys(userId: string): LlmProviderKey[] {
@@ -1655,6 +1737,13 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
     return tableInfo?.sql && !tableInfo.sql.includes("'google'");
   })();
 
+  const needsTokenColumns = (() => {
+    const columns = connection
+      .prepare(`PRAGMA table_info(user_provider_connections)`)
+      .all() as Array<{ name: string }>;
+    return !columns.some((col) => col.name === "encrypted_access_token");
+  })();
+
   if (needsProviderMigration) {
     connection.exec(`
       CREATE TABLE IF NOT EXISTS user_provider_connections_new (
@@ -1688,6 +1777,14 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_user_provider_connections_external
         ON user_provider_connections(provider, external_account_id)
         WHERE external_account_id IS NOT NULL;
+    `);
+  }
+
+  if (needsTokenColumns) {
+    connection.exec(`
+      ALTER TABLE user_provider_connections ADD COLUMN encrypted_access_token TEXT;
+      ALTER TABLE user_provider_connections ADD COLUMN encrypted_refresh_token TEXT;
+      ALTER TABLE user_provider_connections ADD COLUMN token_expires_at TEXT;
     `);
   }
 

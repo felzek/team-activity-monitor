@@ -17,9 +17,9 @@ interface GitHubCommitResponseEntry {
   };
 }
 
-function buildGitHubHeaders(config: AppConfig): HeadersInit {
+function buildGitHubHeaders(config: AppConfig, tokenOverride?: string): HeadersInit {
   return {
-    Authorization: `Bearer ${config.githubToken ?? ""}`,
+    Authorization: `Bearer ${tokenOverride ?? config.githubToken ?? ""}`,
     "X-GitHub-Api-Version": "2022-11-28",
     Accept: "application/vnd.github+json"
   };
@@ -29,7 +29,8 @@ export async function fetchGitHubCommits(
   config: AppConfig,
   member: TeamMember,
   timeframe: ResolvedTimeframe,
-  logger: Logger
+  logger: Logger,
+  tokenOverride?: string
 ): Promise<GitHubAdapterResult> {
   if (config.useRecordedFixtures) {
     return loadFixture<GitHubAdapterResult>(
@@ -53,25 +54,31 @@ export async function fetchGitHubCommits(
       url.searchParams.set("since", timeframe.start);
       url.searchParams.set("per_page", "20");
 
-      const response = await fetchJson<GitHubCommitResponseEntry[]>(
-        url.toString(),
-        {
-          method: "GET",
-          headers: buildGitHubHeaders(config)
-        },
-        {
-          provider: "github",
-          logger
-        }
-      );
+      try {
+        const response = await fetchJson<GitHubCommitResponseEntry[]>(
+          url.toString(),
+          {
+            method: "GET",
+            headers: buildGitHubHeaders(config, tokenOverride)
+          },
+          {
+            provider: "github",
+            logger
+          }
+        );
 
-      return response.map((commit) => ({
-        repo: `${owner}/${repo}`,
-        sha: commit.sha.slice(0, 7),
-        message: commit.commit?.message?.split("\n")[0] ?? "No commit message",
-        authoredAt: commit.commit?.author?.date ?? timeframe.start,
-        url: commit.html_url
-      }));
+        return response.map((commit) => ({
+          repo: `${owner}/${repo}`,
+          sha: commit.sha.slice(0, 7),
+          message: commit.commit?.message?.split("\n")[0] ?? "No commit message",
+          authoredAt: commit.commit?.author?.date ?? timeframe.start,
+          url: commit.html_url
+        }));
+      } catch (err) {
+        // Skip repos that are inaccessible (404, 403) without aborting the whole fetch
+        logger.debug({ owner, repo, err }, "Skipping repo — commits fetch failed");
+        return [];
+      }
     })
   );
 

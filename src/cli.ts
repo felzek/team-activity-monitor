@@ -1,6 +1,6 @@
 import { loadAppConfig } from "./config.js";
 import { logger } from "./lib/logger.js";
-import { generateGroundedResponse } from "./lib/ollama.js";
+import { generateGroundedResponse } from "./lib/llm-pipeline.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";

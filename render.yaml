@@ -16,6 +16,7 @@ services:
         sync: false # set this to the public Render URL after the first deploy
       - key: APP_TIMEZONE
         value: America/New_York
+      # Set to "false" and supply real credentials below to query live Jira + GitHub APIs.
       - key: USE_RECORDED_FIXTURES
         value: "true"
       - key: TEAM_MEMBERS_CONFIG
@@ -24,6 +25,16 @@ services:
         value: config/repos.json
       - key: FIXTURE_DIR
         value: fixtures/demo
+      # --- Live Jira credentials (required when USE_RECORDED_FIXTURES=false) ---
+      # - key: JIRA_BASE_URL
+      #   sync: false  # e.g. https://your-org.atlassian.net
+      # - key: JIRA_EMAIL
+      #   sync: false  # service account email that owns the API token
+      # - key: JIRA_API_TOKEN
+      #   sync: false  # Atlassian API token (manage at id.atlassian.com)
+      # --- Live GitHub credentials (required when USE_RECORDED_FIXTURES=false) ---
+      # - key: GITHUB_TOKEN
+      #   sync: false  # fine-grained PAT with repo:read scope on tracked repos
       - key: DATABASE_PATH
         value: /tmp/team-activity-monitor.db
       - key: SESSION_SECRET

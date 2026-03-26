@@ -18,9 +18,9 @@ interface GitHubPullRequestEntry {
   };
 }
 
-function buildGitHubHeaders(config: AppConfig): HeadersInit {
+function buildGitHubHeaders(config: AppConfig, tokenOverride?: string): HeadersInit {
   return {
-    Authorization: `Bearer ${config.githubToken ?? ""}`,
+    Authorization: `Bearer ${tokenOverride ?? config.githubToken ?? ""}`,
     "X-GitHub-Api-Version": "2022-11-28",
     Accept: "application/vnd.github+json"
   };
@@ -30,7 +30,8 @@ export async function fetchGitHubPullRequests(
   config: AppConfig,
   member: TeamMember,
   timeframe: ResolvedTimeframe,
-  logger: Logger
+  logger: Logger,
+  tokenOverride?: string
 ): Promise<GitHubAdapterResult> {
   if (config.useRecordedFixtures) {
     return loadFixture<GitHubAdapterResult>(config.fixtureDir, `github-prs.${member.id}.json`);
@@ -52,30 +53,36 @@ export async function fetchGitHubPullRequests(
       url.searchParams.set("direction", "desc");
       url.searchParams.set("per_page", "30");
 
-      const response = await fetchJson<GitHubPullRequestEntry[]>(
-        url.toString(),
-        {
-          method: "GET",
-          headers: buildGitHubHeaders(config)
-        },
-        {
-          provider: "github",
-          logger
-        }
-      );
+      try {
+        const response = await fetchJson<GitHubPullRequestEntry[]>(
+          url.toString(),
+          {
+            method: "GET",
+            headers: buildGitHubHeaders(config, tokenOverride)
+          },
+          {
+            provider: "github",
+            logger
+          }
+        );
 
-      return response
-        .filter((pullRequest) => pullRequest.user?.login === member.githubUsername)
-        .filter((pullRequest) => isWithinTimeframe(pullRequest.updated_at, timeframe))
-        .map((pullRequest) => ({
-          repo: `${owner}/${repo}`,
-          number: pullRequest.number,
-          title: pullRequest.title,
-          state: pullRequest.state,
-          updatedAt: pullRequest.updated_at,
-          isOpen: pullRequest.state === "open",
-          url: pullRequest.html_url
-        }));
+        return response
+          .filter((pullRequest) => pullRequest.user?.login === member.githubUsername)
+          .filter((pullRequest) => isWithinTimeframe(pullRequest.updated_at, timeframe))
+          .map((pullRequest) => ({
+            repo: `${owner}/${repo}`,
+            number: pullRequest.number,
+            title: pullRequest.title,
+            state: pullRequest.state,
+            updatedAt: pullRequest.updated_at,
+            isOpen: pullRequest.state === "open",
+            url: pullRequest.html_url
+          }));
+      } catch (err) {
+        // Skip repos that are inaccessible (404, 403) without aborting the whole fetch
+        logger.debug({ owner, repo, err }, "Skipping repo — PRs fetch failed");
+        return [];
+      }
     })
   );
 

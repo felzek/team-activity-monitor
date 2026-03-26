@@ -85,6 +85,9 @@ export interface ResolvedProviderIdentity {
   login: string | null;
   email: string | null;
   metadata: Record<string, unknown>;
+  accessToken: string;
+  refreshToken: string | null;
+  tokenExpiresAt: string | null;
 }
 
 function normalizedUrl(value?: string | null): string | null {
@@ -325,7 +328,10 @@ async function fetchGitHubIdentity(
       tokenType: tokenResponse.token_type ?? null,
       avatarUrl: profile.avatar_url ?? null,
       profileUrl: profile.html_url ?? null
-    }
+    },
+    accessToken,
+    refreshToken: null,
+    tokenExpiresAt: null
   };
 }
 
@@ -387,6 +393,11 @@ async function fetchJiraIdentity(
     );
   }
 
+  const expiresIn = tokenResponse.expires_in;
+  const tokenExpiresAt = expiresIn
+    ? new Date(Date.now() + expiresIn * 1000).toISOString()
+    : null;
+
   return {
     provider: "jira",
     externalAccountId: profile.account_id,
@@ -396,14 +407,17 @@ async function fetchJiraIdentity(
     metadata: {
       mode: "oauth",
       scope: tokenResponse.scope ?? null,
-      expiresIn: tokenResponse.expires_in ?? null,
+      expiresIn: expiresIn ?? null,
       siteId: site?.id ?? null,
       siteName: site?.name ?? null,
       siteUrl: site?.url ?? null,
       avatarUrl: profile.picture ?? null,
       zoneinfo: profile.zoneinfo ?? null,
       locale: profile.locale ?? null
-    }
+    },
+    accessToken,
+    refreshToken: tokenResponse.refresh_token ?? null,
+    tokenExpiresAt
   };
 }
 
@@ -504,7 +518,12 @@ async function fetchGoogleIdentity(
       avatarUrl: profile.picture ?? null,
       verifiedEmail: profile.verified_email ?? null,
       locale: profile.locale ?? null
-    }
+    },
+    accessToken,
+    refreshToken: tokenResponse.refresh_token ?? null,
+    tokenExpiresAt: tokenResponse.expires_in
+      ? new Date(Date.now() + tokenResponse.expires_in * 1000).toISOString()
+      : null
   };
 }
 
@@ -599,6 +618,56 @@ export function buildProviderAuthorizationUrl(
     code: "PROVIDER_AUTH_MODE_UNAVAILABLE",
     statusCode: 501
   });
+}
+
+export async function refreshJiraToken(
+  config: AppConfig,
+  refreshToken: string
+): Promise<{ accessToken: string; refreshToken: string | null; tokenExpiresAt: string | null }> {
+  if (!config.jiraOAuthClientId || !config.jiraOAuthClientSecret) {
+    throw new AppError("Jira OAuth is not configured.", {
+      code: "JIRA_OAUTH_CONFIG_INVALID",
+      statusCode: 500
+    });
+  }
+
+  const response = await fetch(ATLASSIAN_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      grant_type: "refresh_token",
+      client_id: config.jiraOAuthClientId,
+      client_secret: config.jiraOAuthClientSecret,
+      refresh_token: refreshToken
+    })
+  });
+
+  const payload = await readJsonResponse<OAuthTokenResponse>(
+    response,
+    "Jira token refresh failed."
+  );
+
+  if (!response.ok || !payload.access_token) {
+    throw new AppError(
+      payload.error_description ||
+        payload.error ||
+        "Jira token could not be refreshed. Please reconnect your Jira account.",
+      { code: "JIRA_TOKEN_REFRESH_FAILED", statusCode: 502 }
+    );
+  }
+
+  const expiresIn = payload.expires_in;
+  return {
+    accessToken: payload.access_token,
+    // Atlassian may rotate the refresh token — keep the new one if provided
+    refreshToken: payload.refresh_token ?? refreshToken,
+    tokenExpiresAt: expiresIn
+      ? new Date(Date.now() + expiresIn * 1000).toISOString()
+      : null
+  };
 }
 
 export async function completeProviderAuthorization(

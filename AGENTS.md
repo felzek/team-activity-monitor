@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -35,7 +35,7 @@ Natural-language queries flow through a multi-stage pipeline:
 1. **Parse** (`src/query/parser.ts`) — regex-based intent detection (activity_summary, jira_only, github_commits, github_prs) and timeframe extraction
 2. **Resolve** (`src/query/identity.ts`) — fuzzy team member matching with scoring (exact > word boundary > substring)
 3. **Fetch** (`src/orchestrator/activity.ts`) — parallel Jira + GitHub data fetching via provider adapters, with graceful degradation
-4. **Generate** (`src/lib/llm-pipeline.ts`) — builds grounded prompt from ActivitySummary and sends to the selected LLM (Ollama local, OpenAI, Claude, or Gemini)
+4. **Generate** (`src/lib/llm-pipeline.ts`) — builds grounded prompt from ActivitySummary and sends to the selected LLM (Ollama local, OpenAI, Codex, or Gemini)
 
 ### Provider Adapters
 

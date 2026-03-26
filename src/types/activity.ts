@@ -108,6 +108,18 @@ export interface GitHubActivityResult {
   recentRepos: string[];
 }
 
+/** Grounded facts about whether Jira/GitHub were in scope for this query (for the LLM and UI). */
+export interface ProviderIntegrationContext {
+  /** Org/workspace connector allows this source. */
+  workspaceConnectorEnabled: boolean;
+  /** Source was included after org filters (false if connector disabled). */
+  queryIncludedProvider: boolean;
+  /** User OAuth token was available for this request (dashboard queries normally true). */
+  userCredentialPresent: boolean;
+  /** One sentence derived only from the booleans above — safe to surface verbatim in answers. */
+  explanation: string;
+}
+
 export interface ActivitySummary {
   member: {
     displayName: string;
@@ -129,4 +141,12 @@ export interface ActivitySummary {
     data: GitHubActivityResult;
   };
   caveats: string[];
+  /**
+   * Present for dashboard/org queries: whether Jira/GitHub were connected for this workspace
+   * and whether credentials existed. Omit for CLI/demo when unknown.
+   */
+  integration?: {
+    jira: ProviderIntegrationContext;
+    github: ProviderIntegrationContext;
+  };
 }

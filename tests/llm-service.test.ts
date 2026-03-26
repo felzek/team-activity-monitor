@@ -336,3 +336,87 @@ describe("LlmService.getProviderHealth", () => {
     expect(health[0]).toMatchObject({ provider: "gemini", status: "no_models" });
   });
 });
+
+// ── Tests: provider routing isolation ────────────────────────────────────────
+
+describe("LlmService.chat — provider routing isolation", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const userMsg = { role: "user" as const, content: "Hello" };
+
+  it("routes claude:* only to the Anthropic adapter", async () => {
+    const db = makeDb({ claude: "sk-ant", openai: "sk-oai" });
+    const claudeChat = vi.fn().mockResolvedValue({
+      provider: "claude", modelId: "claude-opus-4-6", message: { role: "assistant", content: "hi" },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: "stop", error: null,
+    });
+    const openaiChat = vi.fn();
+    const registry = new LlmProviderRegistry()
+      .register({ provider: "claude",  listModels: vi.fn(), chat: claudeChat })
+      .register({ provider: "openai", listModels: vi.fn(), chat: openaiChat });
+    const service = new LlmService(registry, db as never, logger);
+    await service.chat("user1", { modelId: "claude:claude-opus-4-6", messages: [userMsg] });
+    expect(claudeChat).toHaveBeenCalledOnce();
+    expect(openaiChat).not.toHaveBeenCalled();
+  });
+
+  it("routes openai:* only to the OpenAI adapter", async () => {
+    const db = makeDb({ openai: "sk-oai", claude: "sk-ant", gemini: "AIza" });
+    const openaiChat = vi.fn().mockResolvedValue({
+      provider: "openai", modelId: "gpt-4o", message: { role: "assistant", content: "hi" },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: "stop", error: null,
+    });
+    const claudeChat = vi.fn();
+    const geminiChat = vi.fn();
+    const registry = new LlmProviderRegistry()
+      .register({ provider: "openai", listModels: vi.fn(), chat: openaiChat })
+      .register({ provider: "claude",  listModels: vi.fn(), chat: claudeChat })
+      .register({ provider: "gemini", listModels: vi.fn(), chat: geminiChat });
+    const service = new LlmService(registry, db as never, logger);
+    await service.chat("user1", { modelId: "openai:gpt-4o", messages: [userMsg] });
+    expect(openaiChat).toHaveBeenCalledOnce();
+    expect(claudeChat).not.toHaveBeenCalled();
+    expect(geminiChat).not.toHaveBeenCalled();
+  });
+
+  it("routes gemini:* only to the Gemini adapter", async () => {
+    const db = makeDb({ gemini: "AIza", openai: "sk-oai" });
+    const geminiChat = vi.fn().mockResolvedValue({
+      provider: "gemini", modelId: "models/gemini-2.0-flash-001", message: { role: "assistant", content: "hi" },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: "stop", error: null,
+    });
+    const openaiChat = vi.fn();
+    const registry = new LlmProviderRegistry()
+      .register({ provider: "gemini", listModels: vi.fn(), chat: geminiChat })
+      .register({ provider: "openai", listModels: vi.fn(), chat: openaiChat });
+    const service = new LlmService(registry, db as never, logger);
+    await service.chat("user1", { modelId: "gemini:models/gemini-2.0-flash-001", messages: [userMsg] });
+    expect(geminiChat).toHaveBeenCalledOnce();
+    expect(openaiChat).not.toHaveBeenCalled();
+  });
+
+  it("passes raw provider model ID to the adapter, not the namespaced ID", async () => {
+    const db = makeDb({ openai: "sk-oai" });
+    const openaiChat = vi.fn().mockResolvedValue({
+      provider: "openai", modelId: "gpt-4o-mini", message: { role: "assistant", content: "hi" },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: "stop", error: null,
+    });
+    const registry = new LlmProviderRegistry()
+      .register({ provider: "openai", listModels: vi.fn(), chat: openaiChat });
+    const service = new LlmService(registry, db as never, logger);
+    await service.chat("user1", { modelId: "openai:gpt-4o-mini", messages: [userMsg] });
+    // Adapter must receive "gpt-4o-mini", not "openai:gpt-4o-mini"
+    expect(openaiChat.mock.calls[0]![1].modelId).toBe("gpt-4o-mini");
+  });
+
+  it("propagates LlmError without masking it when adapter fails", async () => {
+    const db = makeDb({ openai: "sk-oai" });
+    const registry = new LlmProviderRegistry().register(
+      makeFailingAdapter("openai", new LlmError("quota exceeded", { llmCode: "rate_limit_error", provider: "openai" }))
+    );
+    const service = new LlmService(registry, db as never, logger);
+    await expect(
+      service.chat("user1", { modelId: "openai:gpt-4o", messages: [userMsg] })
+    ).rejects.toMatchObject({ llmCode: "rate_limit_error", provider: "openai" });
+  });
+});

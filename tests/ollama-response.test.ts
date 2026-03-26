@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { loadAppConfig } from "../src/config.js";
-import { generateGroundedResponse } from "../src/lib/ollama.js";
+import { generateGroundedResponse } from "../src/lib/llm-pipeline.js";
 import type { ActivitySummary } from "../src/types/activity.js";
 import { logger } from "../src/lib/logger.js";
 
@@ -67,8 +67,8 @@ function buildSummary(): ActivitySummary {
   };
 }
 
-describe("local ollama response generation", () => {
-  it("calls Ollama and returns the model output", async () => {
+describe("local HTTP LLM (Ollama-compatible chat API)", () => {
+  it("POSTs /chat and returns the assistant message", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(

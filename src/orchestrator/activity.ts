@@ -80,11 +80,18 @@ async function runProvider<T>(
   }
 }
 
+export interface TokenOverrides {
+  githubToken?: string;
+  jiraToken?: string;
+  jiraSiteId?: string;
+}
+
 export async function buildActivitySummary(
   config: AppConfig,
   parsedQuery: ParsedQuery,
   identity: IdentityResolution,
-  logger: Logger
+  logger: Logger,
+  tokenOverrides?: TokenOverrides
 ): Promise<ActivitySummary> {
   const selectedMember = identity.member;
 
@@ -129,7 +136,10 @@ export async function buildActivitySummary(
   const [jiraResult, githubCommitsResult, githubPullRequestsResult] = await Promise.all([
     jiraRequested
       ? runProvider("jira", logger, () =>
-          fetchJiraActivity(config, selectedMember, parsedQuery.timeframe, logger)
+          fetchJiraActivity(config, selectedMember, parsedQuery.timeframe, logger, {
+            jiraToken: tokenOverrides?.jiraToken,
+            jiraSiteId: tokenOverrides?.jiraSiteId
+          })
         )
       : Promise.resolve({
           status: {
@@ -147,7 +157,13 @@ export async function buildActivitySummary(
         }),
     githubRequested
       ? runProvider("github", logger, () =>
-          fetchGitHubCommits(config, selectedMember, parsedQuery.timeframe, logger)
+          fetchGitHubCommits(
+            config,
+            selectedMember,
+            parsedQuery.timeframe,
+            logger,
+            tokenOverrides?.githubToken
+          )
         )
       : Promise.resolve({
           status: {
@@ -166,7 +182,13 @@ export async function buildActivitySummary(
         }),
     githubRequested
       ? runProvider("github", logger, () =>
-          fetchGitHubPullRequests(config, selectedMember, parsedQuery.timeframe, logger)
+          fetchGitHubPullRequests(
+            config,
+            selectedMember,
+            parsedQuery.timeframe,
+            logger,
+            tokenOverrides?.githubToken
+          )
         )
       : Promise.resolve({
           status: {

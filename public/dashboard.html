@@ -141,20 +141,7 @@
             </form>
             <div class="prompt-bank">
               <p class="field-hint">Try one of these prompts</p>
-              <div class="prompt-chip-row">
-                <button type="button" class="prompt-chip" data-prompt="What is John working on these days?">
-                  What is John working on these days?
-                </button>
-                <button type="button" class="prompt-chip" data-prompt="Show me recent activity for Sarah">
-                  Show me recent activity for Sarah
-                </button>
-                <button type="button" class="prompt-chip" data-prompt="What has Mike been working on this week?">
-                  What has Mike been working on this week?
-                </button>
-                <button type="button" class="prompt-chip" data-prompt="Show me Lisa's recent pull requests">
-                  Show me Lisa's recent pull requests
-                </button>
-              </div>
+              <div class="prompt-chip-row" id="prompt-chip-row"></div>
             </div>
 
           </div>
@@ -179,10 +166,22 @@
                   <div class="summary-copy">
                     <p class="eyebrow">Summary</p>
                     <h3 id="summary-title">Latest activity summary</h3>
-                    <p id="summary-overview" class="summary-overview">
-                      Run a query to populate the latest activity summary.
-                    </p>
+                    <p id="summary-overview" class="summary-overview"></p>
                   </div>
+
+                  <!-- AI-generated grounded answer — the primary response -->
+                  <div class="ai-response-block">
+                    <div class="ai-response-skeleton hidden">
+                      <div class="skeleton skeleton-line" style="width:92%"></div>
+                      <div class="skeleton skeleton-line" style="width:78%"></div>
+                      <div class="skeleton skeleton-line" style="width:86%"></div>
+                      <div class="skeleton skeleton-line" style="width:55%"></div>
+                      <div class="skeleton skeleton-line" style="width:81%"></div>
+                      <div class="skeleton skeleton-line" style="width:68%"></div>
+                    </div>
+                    <pre id="response-text" class="response-text hidden"></pre>
+                  </div>
+
                   <div class="summary-kpi-row">
                     <article class="summary-kpi">
                       <span class="metric-label">Jira issues</span>
@@ -236,11 +235,6 @@
                   </div>
                   <ul id="caveats-list" class="caveat-list"></ul>
                 </section>
-
-                <details class="raw-answer">
-                  <summary>Show raw grounded answer</summary>
-                  <pre id="response-text" class="response-text">Run a query to generate an answer.</pre>
-                </details>
               </div>
             </div>
           </aside>

@@ -1,6 +1,7 @@
 const queryForm = document.getElementById("query-form");
 const queryInput = document.getElementById("query");
 const responseText = document.getElementById("response-text");
+const aiResponseSkeleton = document.querySelector(".ai-response-skeleton");
 const responseShell = document.getElementById("response-shell");
 const responseEmpty = document.getElementById("response-empty");
 const responseStructured = document.getElementById("response-structured");
@@ -86,12 +87,42 @@ for (const p of LLM_PROVIDERS) {
 
 let llmProviderKeys = [];
 
-const exampleQueries = [
-  "What is John working on these days?",
-  "Show me recent activity for Sarah",
-  "What has Mike been working on this week?",
-  "Show me Lisa's recent pull requests"
+const promptTemplates = [
+  (name) => `What is ${name} working on these days?`,
+  (name) => `Show me recent activity for ${name}`,
+  (name) => `What has ${name} been working on this week?`,
+  (name) => `Show me ${name}'s recent pull requests`,
+  (name) => `What Jira tickets is ${name} working on?`,
+  (name) => `What has ${name} committed this week?`,
 ];
+
+function renderPromptChips(members) {
+  const row = document.getElementById("prompt-chip-row");
+  if (!row) return;
+
+  const names = members.map((m) => m.name.split(" ")[0]).filter(Boolean);
+  if (names.length === 0) return;
+
+  const chips = [];
+  for (let i = 0; chips.length < 4 && i < names.length * promptTemplates.length; i++) {
+    const prompt = promptTemplates[i % promptTemplates.length](names[i % names.length]);
+    if (!chips.includes(prompt)) chips.push(prompt);
+  }
+
+  row.innerHTML = chips
+    .map(
+      (prompt) =>
+        `<button type="button" class="prompt-chip" data-prompt="${escapeHtml(prompt)}">${escapeHtml(prompt)}</button>`
+    )
+    .join("");
+
+  row.querySelectorAll(".prompt-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      queryInput.value = btn.dataset.prompt || "";
+      queryInput.focus();
+    });
+  });
+}
 
 let csrfToken = null;
 let currentOrganizationId = null;
@@ -174,6 +205,9 @@ function renderEmptyResponse(title, body) {
   responseShell.classList.remove("is-loading");
   responseEmpty.classList.remove("hidden");
   responseStructured.classList.add("hidden");
+  // Reset response block in case we were mid-load
+  if (aiResponseSkeleton) aiResponseSkeleton.classList.add("hidden");
+  responseText.classList.add("hidden");
   responseEmpty.innerHTML = `
     <p class="eyebrow">Ready for a question</p>
     <h3>${escapeHtml(title)}</h3>
@@ -206,39 +240,36 @@ function showConnectPrompt(missingProviders) {
   });
 }
 
-function renderLoadingResponse(query) {
+function skeletonCard(lines = [70, 90, 50]) {
+  return `<article class="result-card skeleton-card">${
+    lines.map((w) => `<div class="skeleton skeleton-line" style="width:${w}%"></div>`).join("")
+  }</article>`;
+}
+
+function renderLoadingResponse(query, modelLabel = "local model") {
   responseShell.classList.remove("is-empty");
   responseShell.classList.add("is-loading");
   responseEmpty.classList.add("hidden");
   responseStructured.classList.remove("hidden");
-  summaryTitle.textContent = "Searching Jira and GitHub...";
-  summaryOverview.textContent = `Running: "${query}"`;
-  setMetricValue(summaryJiraIssues, "...");
-  setMetricValue(summaryJiraUpdates, "...");
-  setMetricValue(summaryGitHubSignals, "...");
-  setMetricValue(summaryRepos, "...");
-  sourceStatusList.innerHTML = `
-    <article class="source-status-card tone-neutral">
-      <p class="card-label">Provider status</p>
-      <strong>Checking workspace connectors</strong>
-      <p class="source-meta">The app is resolving identity and collecting upstream activity.</p>
-    </article>
-  `;
-  jiraResults.innerHTML = `
-    <article class="result-card state-card tone-neutral">
-      <h4>Loading Jira activity</h4>
-      <p>Fetching assigned issues and recent updates for the selected timeframe.</p>
-    </article>
-  `;
-  githubResults.innerHTML = `
-    <article class="result-card state-card tone-neutral">
-      <h4>Loading GitHub activity</h4>
-      <p>Collecting commits, pull requests, and recently touched repositories.</p>
-    </article>
-  `;
-  caveatsList.innerHTML = "<li>Waiting for provider responses.</li>";
-  responseText.textContent = "Loading grounded activity data...";
-  lastUpdated.textContent = "Fetching provider data...";
+
+  summaryTitle.textContent = `Querying with ${modelLabel}...`;
+  summaryOverview.textContent = `Resolving teammates for: "${query}"`;
+
+  setMetricValue(summaryJiraIssues, "–");
+  setMetricValue(summaryJiraUpdates, "–");
+  setMetricValue(summaryGitHubSignals, "–");
+  setMetricValue(summaryRepos, "–");
+
+  // Show response skeleton, hide the pre
+  if (aiResponseSkeleton) aiResponseSkeleton.classList.remove("hidden");
+  responseText.classList.add("hidden");
+  responseText.textContent = "";
+
+  sourceStatusList.innerHTML = skeletonCard([40, 65]) + skeletonCard([55, 45]);
+  jiraResults.innerHTML   = skeletonCard([45, 88, 60]) + skeletonCard([50, 80, 55]);
+  githubResults.innerHTML = skeletonCard([40, 92, 65]) + skeletonCard([55, 75, 50]);
+  caveatsList.innerHTML   = "";
+  lastUpdated.textContent = "Fetching...";
 }
 
 async function api(path, options = {}) {
@@ -800,6 +831,7 @@ function renderQueryResponse(payload) {
   responseShell.classList.remove("is-empty", "is-loading");
   responseEmpty.classList.add("hidden");
   responseStructured.classList.remove("hidden");
+  responseShell.scrollTop = 0; // always start at top of the fixed box
   summaryTitle.textContent = summary.needsClarification
     ? "Need a clearer teammate match"
     : `Activity summary for ${summary.member.displayName}`;
@@ -812,7 +844,12 @@ function renderQueryResponse(payload) {
   jiraResults.innerHTML = renderJiraResults(summary);
   githubResults.innerHTML = renderGitHubResults(summary);
   renderCaveats(summary, payload);
+
+  // Reveal the AI-generated answer
+  if (aiResponseSkeleton) aiResponseSkeleton.classList.add("hidden");
   responseText.textContent = rawResponse;
+  responseText.classList.remove("hidden");
+
   lastUpdated.textContent = `Last updated ${formatDateTime(new Date().toISOString())}`;
 
   // Show which model was used (provider model or local fallback)
@@ -828,15 +865,6 @@ function renderQueryResponse(payload) {
     }
   }
 
-  // Surface model fallback warning (e.g. missing API key, provider error)
-  if (payload.modelWarning) {
-    const mw = payload.modelWarning;
-    if (/LLM providers first|API key.*Settings|Settings.*LLM providers/i.test(mw)) {
-      setBanner(`Add your API key in Settings first\n${mw}`, "warning", "api-key");
-    } else {
-      setBanner(mw, "warning");
-    }
-  }
 }
 
 const LLM_LABELS = { openai: "OpenAI", gemini: "Google Gemini", claude: "Anthropic Claude" };
@@ -989,6 +1017,7 @@ async function loadWorkspaceData() {
   memberCount.textContent = String(members.items.length);
   queryCount.textContent = String(history.items.length);
   auditCount.textContent = String(auditEvents.items.length);
+  renderPromptChips(members.items);
 
   const currentOrganization = organizations.find((organization) => organization.id === currentOrganizationId);
   orgName.textContent = currentOrganization?.name || "No organization";
@@ -1118,6 +1147,25 @@ async function disconnectProviderAuth(provider) {
   }
 }
 
+/** Active query AbortController — allows cancelling an in-flight request. */
+let activeQueryController = null;
+
+/**
+ * Cycles through staged status messages while the query is in flight.
+ * Returns a cancel function that clears all pending timeouts.
+ */
+function startStagedMessages(modelLabel) {
+  const stages = [
+    { delay: 700,  text: "Fetching Jira and GitHub activity..." },
+    { delay: 3500, text: `Connecting to ${modelLabel}...` },
+    { delay: 6500, text: "Generating response..." },
+  ];
+  const timers = stages.map(({ delay, text }) =>
+    setTimeout(() => { summaryOverview.textContent = text; }, delay)
+  );
+  return () => timers.forEach(clearTimeout);
+}
+
 async function runQuery(event) {
   event.preventDefault();
 
@@ -1136,16 +1184,29 @@ async function runQuery(event) {
     return;
   }
 
-  renderLoadingResponse(query);
+  const selectedModelId = modelSelect ? modelSelect.value : "";
+  const model = selectedModelId ? chatModels.find((m) => m.id === selectedModelId) : null;
+  const modelLabel = model ? model.displayName : selectedModelId || "local model";
+
+  // Prevent duplicate submits
+  const submitBtn = queryForm.querySelector('[type="submit"]');
+  if (submitBtn) submitBtn.disabled = true;
+  if (activeQueryController) activeQueryController.abort();
+  activeQueryController = new AbortController();
+
+  renderLoadingResponse(query, modelLabel);
   setBanner("");
 
+  const stopStages = startStagedMessages(modelLabel);
+
   try {
-    const selectedModelId = modelSelect ? modelSelect.value : "";
     const payload = await api(`/api/v1/orgs/${currentOrganizationId}/query`, {
       method: "POST",
-      body: JSON.stringify({ query, ...(selectedModelId ? { modelId: selectedModelId } : {}) })
+      body: JSON.stringify({ query, ...(selectedModelId ? { modelId: selectedModelId } : {}) }),
+      signal: activeQueryController.signal
     });
 
+    stopStages();
     renderQueryResponse(payload);
 
     if (payload.summary?.needsClarification) {
@@ -1160,24 +1221,91 @@ async function runQuery(event) {
 
     await loadWorkspaceData();
   } catch (error) {
-    if (error?.code === "PROVIDER_AUTH_REQUIRED") {
-      if (error.payload?.providerAuth) {
-        renderProviderAuth(error.payload.providerAuth);
-      }
-      const missing = error.payload?.providerAuth?.missingProviders || ["github", "jira"];
-      showConnectPrompt(missing);
-      const labels = missing.map((p) => (p === "github" ? "GitHub" : p === "google" ? "Google" : "Jira"));
-      setBanner(`Connect ${labels.join(" and ")} before running queries.`, "warning");
-      responseShell.scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
-      responseText.textContent = "The query could not be completed.";
-      renderEmptyResponse(
-        "The query could not be completed",
-        error instanceof Error ? error.message : "Unexpected error."
-      );
-      setBanner(error instanceof Error ? error.message : "Unexpected error.", "error");
-    }
+    stopStages();
+    handleQueryError(error, modelLabel, selectedModelId);
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+    activeQueryController = null;
   }
+}
+
+const LLM_ERROR_CODES = new Set([
+  "configuration_error", "authentication_error", "authorization_error",
+  "rate_limit_error", "provider_unavailable", "invalid_model",
+  "timeout_error", "unknown_provider_error",
+]);
+
+function handleQueryError(error, modelLabel, selectedModelId) {
+  const code = error?.code;
+
+  if (code === "PROVIDER_AUTH_REQUIRED") {
+    if (error.payload?.providerAuth) renderProviderAuth(error.payload.providerAuth);
+    const missing = error.payload?.providerAuth?.missingProviders || ["github", "jira"];
+    showConnectPrompt(missing);
+    const labels = missing.map((p) => (p === "github" ? "GitHub" : p === "google" ? "Google" : "Jira"));
+    setBanner(`Connect ${labels.join(" and ")} before running queries.`, "warning");
+    responseShell.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (LLM_ERROR_CODES.has(code)) {
+    let title, body;
+    switch (code) {
+      case "configuration_error":
+        title = `${modelLabel} is not configured`;
+        body = error.message || `Add your API key in Settings → LLM providers.`;
+        renderEmptyResponse(title, body);
+        setBanner(body, "warning", "api-key");
+        break;
+      case "authentication_error":
+        title = `${modelLabel} authentication failed`;
+        body = error.message || "Your API key may be invalid. Check Settings → LLM providers.";
+        renderEmptyResponse(title, body);
+        setBanner(body, "error");
+        break;
+      case "authorization_error":
+        title = `${modelLabel} authorization failed`;
+        body = error.message || "Check that your API key has the right permissions.";
+        renderEmptyResponse(title, body);
+        setBanner(body, "error");
+        break;
+      case "rate_limit_error":
+        title = `${modelLabel} rate limit reached`;
+        body = error.message || "Please wait a moment and try again.";
+        renderEmptyResponse(title, body);
+        setBanner(body, "warning");
+        break;
+      case "provider_unavailable":
+        title = `${modelLabel} is temporarily unavailable`;
+        body = error.message || "Try a different model or try again in a moment.";
+        renderEmptyResponse(title, body);
+        setBanner(body, "warning");
+        break;
+      case "invalid_model":
+        title = "The selected model could not be used";
+        body = "Please reselect a model from the dropdown.";
+        renderEmptyResponse(title, body);
+        setBanner(body, "error");
+        if (selectedModelId) localStorage.removeItem(CHAT_MODEL_STORAGE_KEY);
+        break;
+      case "timeout_error":
+        title = `${modelLabel} timed out`;
+        body = error.message || "The request took too long. Try again or choose a faster model.";
+        renderEmptyResponse(title, body);
+        setBanner(body, "warning");
+        break;
+      default:
+        renderEmptyResponse(`${modelLabel} error`, error.message || "Unexpected provider error.");
+        setBanner(error.message || "Unexpected provider error.", "error");
+    }
+    return;
+  }
+
+  renderEmptyResponse(
+    "The query could not be completed",
+    error instanceof Error ? error.message : "Unexpected error."
+  );
+  setBanner(error instanceof Error ? error.message : "Unexpected error.", "error");
 }
 
 async function switchOrganization() {
@@ -1211,13 +1339,6 @@ async function logout() {
 
 queryForm.addEventListener("submit", runQuery);
 logoutButton.addEventListener("click", logout);
-document.querySelectorAll(".prompt-chip").forEach((button) => {
-  button.addEventListener("click", () => {
-    const prompt = button.dataset.prompt || "";
-    queryInput.value = prompt;
-    queryInput.focus();
-  });
-});
 queryInput.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
     event.preventDefault();
@@ -1393,7 +1514,7 @@ function handleModelSelectChange() {
     const hasKey = llmProviderKeys.some((k) => k.provider === provider);
     if (!hasKey) {
       setBanner(
-        `Add your API key in Settings first\n${providerLabel(provider)} key is not saved yet. Open Settings → LLM providers, paste and Save key, then pick this model again. Until then, queries use Qwen 2.5 7B (local).`,
+        `Add your API key in Settings first\n${providerLabel(provider)} key is not saved yet. Open Settings → LLM providers, paste and Save key, then pick this model again.`,
         "warning",
         "api-key"
       );

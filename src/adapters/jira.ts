@@ -39,16 +39,29 @@ interface JiraChangelogResponse {
   }>;
 }
 
-function buildJiraAuthHeader(config: AppConfig): string {
+function buildJiraAuthHeader(config: AppConfig, jiraToken?: string): string {
+  if (jiraToken) {
+    return `Bearer ${jiraToken}`;
+  }
   return `Basic ${Buffer.from(
     `${config.jiraEmail ?? ""}:${config.jiraApiToken ?? ""}`
   ).toString("base64")}`;
 }
 
+function buildJiraApiBase(config: AppConfig, jiraSiteId?: string): string {
+  if (jiraSiteId) {
+    // Atlassian OAuth API: access via cloud ID
+    return `https://api.atlassian.com/ex/jira/${jiraSiteId}`;
+  }
+  return (config.jiraBaseUrl ?? "").replace(/\/$/, "");
+}
+
 async function resolveJiraAccountId(
   config: AppConfig,
   member: TeamMember,
-  logger: Logger
+  logger: Logger,
+  jiraToken?: string,
+  jiraSiteId?: string
 ): Promise<{ accountId: string; displayName: string }> {
   if (member.jiraAccountId) {
     return {
@@ -57,14 +70,15 @@ async function resolveJiraAccountId(
     };
   }
 
+  const apiBase = buildJiraApiBase(config, jiraSiteId);
   const query = encodeURIComponent(member.jiraQuery ?? member.displayName);
-  const url = `${config.jiraBaseUrl}/rest/api/3/user/search?query=${query}&maxResults=10`;
+  const url = `${apiBase}/rest/api/3/user/search?query=${query}&maxResults=10`;
   const users = await fetchJson<JiraUserSearchResponseEntry[]>(
     url,
     {
       method: "GET",
       headers: {
-        Authorization: buildJiraAuthHeader(config)
+        Authorization: buildJiraAuthHeader(config, jiraToken)
       }
     },
     {
@@ -93,15 +107,18 @@ async function resolveJiraAccountId(
 async function fetchIssueChanges(
   config: AppConfig,
   issueKey: string,
-  logger: Logger
+  logger: Logger,
+  jiraToken?: string,
+  jiraSiteId?: string
 ): Promise<JiraIssueChange[]> {
-  const url = `${config.jiraBaseUrl}/rest/api/3/issue/${issueKey}/changelog?maxResults=10`;
+  const apiBase = buildJiraApiBase(config, jiraSiteId);
+  const url = `${apiBase}/rest/api/3/issue/${issueKey}/changelog?maxResults=10`;
   const changelog = await fetchJson<JiraChangelogResponse>(
     url,
     {
       method: "GET",
       headers: {
-        Authorization: buildJiraAuthHeader(config)
+        Authorization: buildJiraAuthHeader(config, jiraToken)
       }
     },
     {
@@ -125,21 +142,28 @@ export async function fetchJiraActivity(
   config: AppConfig,
   member: TeamMember,
   timeframe: ResolvedTimeframe,
-  logger: Logger
+  logger: Logger,
+  tokens?: { jiraToken?: string; jiraSiteId?: string }
 ): Promise<JiraAdapterResult> {
   if (config.useRecordedFixtures) {
     return loadFixture<JiraAdapterResult>(config.fixtureDir, `jira.${member.id}.json`);
   }
 
-  const identity = await resolveJiraAccountId(config, member, logger);
-  const jql = `assignee = "${identity.accountId}" AND statusCategory != Done ORDER BY updated DESC`;
+  const jiraToken = tokens?.jiraToken;
+  const jiraSiteId = tokens?.jiraSiteId;
+  const apiBase = buildJiraApiBase(config, jiraSiteId);
+
+  const identity = await resolveJiraAccountId(config, member, logger, jiraToken, jiraSiteId);
+  // Include all issues updated within the timeframe — "not done" filter alone misses recently completed work
+  const sinceDate = timeframe.start.slice(0, 10); // YYYY-MM-DD
+  const jql = `assignee = "${identity.accountId}" AND updated >= "${sinceDate}" ORDER BY updated DESC`;
 
   const searchResponse = await fetchJson<JiraSearchResponse>(
-    `${config.jiraBaseUrl}/rest/api/3/search/jql`,
+    `${apiBase}/rest/api/3/search/jql`,
     {
       method: "POST",
       headers: {
-        Authorization: buildJiraAuthHeader(config),
+        Authorization: buildJiraAuthHeader(config, jiraToken),
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -160,7 +184,7 @@ export async function fetchJiraActivity(
   const issuesWithChanges = await Promise.all(
     topIssues.map(async (issue, index) => {
       const recentChanges =
-        index < 5 ? await fetchIssueChanges(config, issue.key, logger) : [];
+        index < 5 ? await fetchIssueChanges(config, issue.key, logger, jiraToken, jiraSiteId) : [];
 
       return {
         key: issue.key,
@@ -169,7 +193,7 @@ export async function fetchJiraActivity(
         priority: issue.fields.priority?.name,
         issueType: issue.fields.issuetype?.name,
         updated: issue.fields.updated ?? timeframe.start,
-        url: `${config.jiraBaseUrl}/browse/${issue.key}`,
+        url: config.jiraBaseUrl ? `${config.jiraBaseUrl}/browse/${issue.key}` : undefined,
         recentChanges
       };
     })

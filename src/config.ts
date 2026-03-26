@@ -42,11 +42,16 @@ const envSchema = z.object({
   JIRA_API_TOKEN: z.string().optional(),
   JIRA_OAUTH_CLIENT_ID: z.string().optional(),
   JIRA_OAUTH_CLIENT_SECRET: z.string().optional(),
-  JIRA_OAUTH_SCOPE: scopeString.default(["read:me", "read:jira-user", "offline_access"]),
+  JIRA_OAUTH_SCOPE: scopeString.default([
+    "read:me",
+    "read:jira-user",
+    "read:jira-work",
+    "offline_access"
+  ]),
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_OAUTH_CLIENT_ID: z.string().optional(),
   GITHUB_OAUTH_CLIENT_SECRET: z.string().optional(),
-  GITHUB_OAUTH_SCOPE: scopeString.default(["read:user", "user:email"]),
+  GITHUB_OAUTH_SCOPE: scopeString.default(["repo", "read:user", "user:email"]),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   GOOGLE_OAUTH_SCOPE: scopeString.default(["openid", "email", "profile"]),
@@ -175,24 +180,11 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     z.array(trackedRepoSchema)
   ).filter((repo) => !repo.disabled);
 
-  if (trackedRepos.length === 0) {
-    throw new Error("TRACKED_REPOS_CONFIG must contain at least one enabled repository.");
-  }
+  // Repos may be empty when using OAuth-based per-org repo discovery — not a startup error.
 
   if (!parsedEnv.USE_RECORDED_FIXTURES) {
-    const missing = [
-      ["JIRA_BASE_URL", parsedEnv.JIRA_BASE_URL],
-      ["JIRA_EMAIL", parsedEnv.JIRA_EMAIL],
-      ["JIRA_API_TOKEN", parsedEnv.JIRA_API_TOKEN],
-      ["GITHUB_TOKEN", parsedEnv.GITHUB_TOKEN]
-    ].filter(([, value]) => !value);
-
-    if (missing.length > 0) {
-      const names = missing.map(([name]) => name).join(", ");
-      throw new Error(
-        `Missing required environment variables for live mode: ${names}. Set USE_RECORDED_FIXTURES=true to run in fallback mode.`
-      );
-    }
+    // Service-account credentials are optional when OAuth is configured; they serve as fallbacks.
+    // No startup error — missing credentials surface as per-query provider failures.
   }
 
   return {
