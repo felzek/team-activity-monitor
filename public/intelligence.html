@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Intelligence | Team Activity Monitor</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="dashboard-body">
+
+    <!-- Top Navigation -->
+    <nav class="intel-topnav" role="navigation" aria-label="Primary navigation">
+      <div class="intel-topnav-inner">
+        <div class="intel-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+          </div>
+          <div class="intel-brand-text">
+            <span class="intel-brand-name">Team Activity</span>
+            <span class="intel-brand-badge">Intelligence</span>
+          </div>
+        </div>
+        <div class="intel-nav-links">
+          <a href="/app" class="intel-nav-link">Workspace</a>
+          <a href="/intelligence" class="intel-nav-link intel-nav-link-active" aria-current="page">Intelligence</a>
+        </div>
+        <div class="intel-user-bar">
+          <div class="intel-user-info">
+            <span id="topnav-user" class="intel-user-name">Loading...</span>
+            <span id="topnav-org" class="intel-user-org muted-meta"></span>
+          </div>
+          <button id="topnav-logout" class="button-secondary intel-btn-sm" type="button">Log out</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Page Header + Tabs -->
+    <div class="intel-page-header">
+      <div class="intel-page-header-inner">
+        <div class="intel-page-title-area">
+          <p class="eyebrow">Work Intelligence</p>
+          <h1 class="intel-page-h1">Team Dashboard</h1>
+          <p class="intel-subtitle muted-meta">Live view across GitHub and Jira — last 7 days</p>
+        </div>
+        <div class="intel-source-status-row" id="source-status-row" aria-live="polite">
+          <span class="intel-source-pill intel-source-pill-loading" id="gh-status-pill" aria-label="GitHub status">
+            <span class="intel-source-dot"></span>GitHub
+          </span>
+          <span class="intel-source-pill intel-source-pill-loading" id="jira-status-pill" aria-label="Jira status">
+            <span class="intel-source-dot"></span>Jira
+          </span>
+        </div>
+      </div>
+      <div class="intel-tab-bar" role="tablist" aria-label="Dashboard views">
+        <button class="intel-tab intel-tab-active" data-tab="overview" role="tab" aria-selected="true" aria-controls="tab-overview" id="tab-btn-overview">
+          Overview
+        </button>
+        <button class="intel-tab" data-tab="github" role="tab" aria-selected="false" aria-controls="tab-github" id="tab-btn-github">
+          GitHub
+        </button>
+        <button class="intel-tab" data-tab="jira" role="tab" aria-selected="false" aria-controls="tab-jira" id="tab-btn-jira">
+          Jira
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="intel-main">
+
+      <!-- ═══ OVERVIEW TAB ═══ -->
+      <div id="tab-overview" class="intel-tab-pane" role="tabpanel" aria-labelledby="tab-btn-overview">
+
+        <!-- AI Insight Banner -->
+        <div class="intel-ai-banner" id="ai-banner" aria-live="polite">
+          <div class="intel-ai-banner-icon" aria-hidden="true">✦</div>
+          <div class="intel-ai-banner-body">
+            <p class="intel-ai-banner-label">AI Insight</p>
+            <p class="intel-ai-banner-text" id="ai-text">Loading weekly summary...</p>
+          </div>
+          <button
+            class="intel-ai-banner-refresh"
+            id="ai-refresh-btn"
+            type="button"
+            title="Regenerate insight"
+            aria-label="Regenerate AI insight"
+          >↻</button>
+        </div>
+
+        <!-- Overview KPI Cards -->
+        <section class="intel-section" aria-label="Key metrics">
+          <div class="intel-kpi-grid" id="overview-kpi-grid">
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+          </div>
+        </section>
+
+        <!-- Cross-source Activity Feed -->
+        <section class="intel-section" aria-label="Recent activity">
+          <div class="intel-section-header">
+            <h2 class="intel-section-title">Recent activity</h2>
+            <span id="activity-feed-meta" class="muted-meta intel-section-meta">Loading...</span>
+          </div>
+          <div class="intel-activity-feed" id="activity-feed" role="feed" aria-label="Cross-source activity feed">
+            <div class="intel-skeleton intel-skeleton-feed-item"></div>
+            <div class="intel-skeleton intel-skeleton-feed-item"></div>
+            <div class="intel-skeleton intel-skeleton-feed-item"></div>
+            <div class="intel-skeleton intel-skeleton-feed-item"></div>
+          </div>
+        </section>
+
+        <!-- Source Health Cards -->
+        <section class="intel-section" aria-label="Source health">
+          <div class="intel-source-pair-grid" id="source-pair-grid">
+            <div class="intel-skeleton" style="height:130px;border-radius:14px;"></div>
+            <div class="intel-skeleton" style="height:130px;border-radius:14px;"></div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ═══ GITHUB TAB ═══ -->
+      <div id="tab-github" class="intel-tab-pane intel-tab-pane-hidden" role="tabpanel" aria-labelledby="tab-btn-github">
+
+        <!-- GitHub Source Header -->
+        <div class="intel-source-header" id="github-source-header">
+          <div class="intel-source-header-identity">
+            <div class="intel-source-logo intel-github-logo" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.6.11.793-.26.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="intel-source-header-title" id="github-header-title">GitHub</h2>
+              <p class="intel-source-header-meta muted-meta" id="github-header-meta">Loading...</p>
+            </div>
+          </div>
+          <div class="intel-source-header-actions">
+            <button class="button-secondary intel-btn-sm" id="github-refresh-btn" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <!-- GitHub KPI Cards -->
+        <section class="intel-section">
+          <div class="intel-kpi-grid" id="github-kpi-grid">
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+          </div>
+        </section>
+
+        <!-- GitHub Sub-tabs -->
+        <div class="intel-subtab-bar" id="github-subtab-bar" role="tablist" aria-label="GitHub views">
+          <button class="intel-subtab intel-subtab-active" data-subtab="gh-commits" role="tab" aria-selected="true">Commits</button>
+          <button class="intel-subtab" data-subtab="gh-prs" role="tab" aria-selected="false">Pull Requests</button>
+          <button class="intel-subtab" data-subtab="gh-repos" role="tab" aria-selected="false">Repositories</button>
+        </div>
+
+        <div id="gh-subtab-content">
+          <div id="gh-commits" class="intel-subtab-pane">
+            <div id="gh-commits-content" class="intel-table-wrap">
+              <div class="intel-skeleton intel-skeleton-table-row"></div>
+              <div class="intel-skeleton intel-skeleton-table-row"></div>
+              <div class="intel-skeleton intel-skeleton-table-row"></div>
+            </div>
+          </div>
+          <div id="gh-prs" class="intel-subtab-pane intel-subtab-pane-hidden">
+            <div id="gh-prs-content" class="intel-table-wrap"></div>
+          </div>
+          <div id="gh-repos" class="intel-subtab-pane intel-subtab-pane-hidden">
+            <div id="gh-repos-content" class="intel-table-wrap"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══ JIRA TAB ═══ -->
+      <div id="tab-jira" class="intel-tab-pane intel-tab-pane-hidden" role="tabpanel" aria-labelledby="tab-btn-jira">
+
+        <!-- Jira Source Header -->
+        <div class="intel-source-header" id="jira-source-header">
+          <div class="intel-source-header-identity">
+            <div class="intel-source-logo intel-jira-logo" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.218 5.218 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.757a5.218 5.218 0 0 0 5.232 5.214h2.13v2.058a5.218 5.218 0 0 0 5.213 5.214V6.762a1.005 1.005 0 0 0-1.038-1.005zM23.017 0H11.47a5.218 5.218 0 0 0 5.233 5.215h2.129v2.057A5.218 5.218 0 0 0 24.022 12.49V1.005A1.005 1.005 0 0 0 23.017 0z"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="intel-source-header-title" id="jira-header-title">Jira</h2>
+              <p class="intel-source-header-meta muted-meta" id="jira-header-meta">Loading...</p>
+            </div>
+          </div>
+          <div class="intel-source-header-actions">
+            <button class="button-secondary intel-btn-sm" id="jira-refresh-btn" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Jira KPI Cards -->
+        <section class="intel-section">
+          <div class="intel-kpi-grid" id="jira-kpi-grid">
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+            <div class="intel-kpi-card intel-skeleton-card"><div class="intel-skeleton intel-skeleton-kpi"></div></div>
+          </div>
+        </section>
+
+        <!-- Jira Sub-tabs -->
+        <div class="intel-subtab-bar" id="jira-subtab-bar" role="tablist" aria-label="Jira views">
+          <button class="intel-subtab intel-subtab-active" data-subtab="jira-open" role="tab" aria-selected="true">Open Issues</button>
+          <button class="intel-subtab" data-subtab="jira-recent" role="tab" aria-selected="false">Recent Updates</button>
+          <button class="intel-subtab" data-subtab="jira-projects" role="tab" aria-selected="false">Projects</button>
+        </div>
+
+        <div id="jira-subtab-content">
+          <div id="jira-open" class="intel-subtab-pane">
+            <div id="jira-open-content" class="intel-table-wrap">
+              <div class="intel-skeleton intel-skeleton-table-row"></div>
+              <div class="intel-skeleton intel-skeleton-table-row"></div>
+              <div class="intel-skeleton intel-skeleton-table-row"></div>
+            </div>
+          </div>
+          <div id="jira-recent" class="intel-subtab-pane intel-subtab-pane-hidden">
+            <div id="jira-recent-content" class="intel-table-wrap"></div>
+          </div>
+          <div id="jira-projects" class="intel-subtab-pane intel-subtab-pane-hidden">
+            <div id="jira-projects-content" class="intel-table-wrap"></div>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+
+    <script src="/intelligence.js"></script>
+  </body>
+</html>
