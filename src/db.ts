@@ -8,11 +8,14 @@ import session from "express-session";
 
 import type { AppConfig } from "./config.js";
 import type { ActivitySummary, TeamMember, TrackedRepo } from "./types/activity.js";
+import { decrypt, encrypt, maskApiKey } from "./lib/encryption.js";
 import type {
   AuditEventEntry,
   ConnectionStatus,
   ConnectorRecord,
   InvitationEntry,
+  LlmProvider,
+  LlmProviderKey,
   OrganizationMemberEntry,
   OrganizationRole,
   OrganizationSettings,
@@ -106,9 +109,19 @@ interface UserProviderConnectionRow {
   display_name: string | null;
   login: string | null;
   email: string | null;
-  auth_method: "demo" | "oauth";
+  auth_method: "oauth";
   connected_at: string | null;
   metadata_json: string;
+  updated_at: string;
+}
+
+interface LlmProviderKeyRow {
+  id: string;
+  user_id: string;
+  provider: LlmProvider;
+  display_label: string;
+  encrypted_key: string;
+  connected_at: string;
   updated_at: string;
 }
 
@@ -116,6 +129,7 @@ interface DatabaseDefaults {
   teamMembers: TeamMember[];
   trackedRepos: TrackedRepo[];
   defaultConnectionStatus: ConnectionStatus;
+  encryptionSecret: string;
 }
 
 function ensureDatabaseDirectory(filePath: string): void {
@@ -194,6 +208,18 @@ function toUserProviderConnection(row: UserProviderConnectionRow): UserProviderC
     authMethod: row.auth_method,
     connectedAt: row.connected_at,
     metadata: parseJson<Record<string, unknown>>(row.metadata_json, {}),
+    updatedAt: row.updated_at
+  };
+}
+
+function toLlmProviderKey(row: LlmProviderKeyRow): LlmProviderKey {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    provider: row.provider,
+    displayLabel: row.display_label,
+    maskedKey: row.display_label,
+    connectedAt: row.connected_at,
     updatedAt: row.updated_at
   };
 }
@@ -898,7 +924,7 @@ export class AppDatabase {
       displayName?: string | null;
       login?: string | null;
       email?: string | null;
-      authMethod?: "demo" | "oauth";
+      authMethod?: "oauth";
       connectedAt?: string | null;
       metadata?: Record<string, unknown>;
     }
@@ -916,7 +942,7 @@ export class AppDatabase {
         input.displayName === undefined ? existing?.displayName ?? null : input.displayName,
       login: input.login === undefined ? existing?.login ?? null : input.login,
       email: input.email === undefined ? existing?.email ?? null : input.email,
-      authMethod: input.authMethod ?? existing?.authMethod ?? "demo",
+      authMethod: input.authMethod ?? existing?.authMethod ?? "oauth",
       connectedAt:
         input.connectedAt === undefined
           ? input.status === "connected"
@@ -989,6 +1015,75 @@ export class AppDatabase {
     });
   }
 
+  listLlmProviderKeys(userId: string): LlmProviderKey[] {
+    const rows = this.connection
+      .prepare(
+        `SELECT id, user_id, provider, display_label, encrypted_key, connected_at, updated_at
+         FROM llm_provider_keys
+         WHERE user_id = ?
+         ORDER BY connected_at ASC`
+      )
+      .all(userId) as LlmProviderKeyRow[];
+
+    return rows.map(toLlmProviderKey);
+  }
+
+  getLlmProviderKey(userId: string, provider: LlmProvider): LlmProviderKey | null {
+    const row = this.connection
+      .prepare(
+        `SELECT id, user_id, provider, display_label, encrypted_key, connected_at, updated_at
+         FROM llm_provider_keys
+         WHERE user_id = ? AND provider = ?`
+      )
+      .get(userId, provider) as LlmProviderKeyRow | undefined;
+
+    return row ? toLlmProviderKey(row) : null;
+  }
+
+  upsertLlmProviderKey(
+    userId: string,
+    provider: LlmProvider,
+    apiKey: string
+  ): LlmProviderKey {
+    const now = new Date().toISOString();
+    const encryptedKey = encrypt(apiKey, this.defaults.encryptionSecret);
+    const masked = maskApiKey(apiKey);
+    const existing = this.getLlmProviderKey(userId, provider);
+    const id = existing?.id ?? randomUUID();
+
+    this.connection
+      .prepare(
+        `INSERT INTO llm_provider_keys (id, user_id, provider, display_label, encrypted_key, connected_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, provider) DO UPDATE SET
+           display_label = excluded.display_label,
+           encrypted_key = excluded.encrypted_key,
+           updated_at = excluded.updated_at`
+      )
+      .run(id, userId, provider, masked, encryptedKey, existing?.connectedAt ?? now, now);
+
+    return this.getLlmProviderKey(userId, provider)!;
+  }
+
+  decryptLlmProviderKey(userId: string, provider: LlmProvider): string | null {
+    const row = this.connection
+      .prepare(
+        `SELECT encrypted_key FROM llm_provider_keys WHERE user_id = ? AND provider = ?`
+      )
+      .get(userId, provider) as { encrypted_key: string } | undefined;
+
+    if (!row) return null;
+    return decrypt(row.encrypted_key, this.defaults.encryptionSecret);
+  }
+
+  deleteLlmProviderKey(userId: string, provider: LlmProvider): boolean {
+    const result = this.connection
+      .prepare(`DELETE FROM llm_provider_keys WHERE user_id = ? AND provider = ?`)
+      .run(userId, provider);
+
+    return result.changes > 0;
+  }
+
   getProviderAuthRequirement(
     userId: string,
     requiredProviders: ProviderAuthProvider[] = ["github", "jira"]
@@ -1006,11 +1101,11 @@ export class AppDatabase {
     });
 
     return {
-      mode: "demo",
+      mode: "unavailable",
       providerModes: {
-        github: "demo",
-        jira: "demo",
-        google: "demo"
+        github: "unavailable",
+        jira: "unavailable",
+        google: "unavailable"
       },
       requiredProviders,
       missingProviders,
@@ -1450,13 +1545,13 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
     CREATE TABLE IF NOT EXISTS user_provider_connections (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
-      provider TEXT NOT NULL CHECK (provider IN ('github', 'jira')),
+      provider TEXT NOT NULL CHECK (provider IN ('github', 'jira', 'google')),
       status TEXT NOT NULL CHECK (status IN ('connected', 'disconnected')),
       external_account_id TEXT,
       display_name TEXT,
       login TEXT,
       email TEXT,
-      auth_method TEXT NOT NULL CHECK (auth_method IN ('demo', 'oauth')),
+      auth_method TEXT NOT NULL CHECK (auth_method IN ('oauth')),
       connected_at TEXT,
       metadata_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -1471,6 +1566,21 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_user_provider_connections_external
       ON user_provider_connections(provider, external_account_id)
       WHERE external_account_id IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS llm_provider_keys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('openai', 'gemini', 'claude')),
+      display_label TEXT NOT NULL,
+      encrypted_key TEXT NOT NULL,
+      connected_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, provider),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_llm_provider_keys_user
+      ON llm_provider_keys(user_id);
 
     CREATE TABLE IF NOT EXISTS query_runs (
       id TEXT PRIMARY KEY,
@@ -1538,10 +1648,54 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
       ON sessions(expires_at);
   `);
 
+  const needsProviderMigration = (() => {
+    const tableInfo = connection
+      .prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='user_provider_connections'`)
+      .get() as { sql: string } | undefined;
+    return tableInfo?.sql && !tableInfo.sql.includes("'google'");
+  })();
+
+  if (needsProviderMigration) {
+    connection.exec(`
+      CREATE TABLE IF NOT EXISTS user_provider_connections_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        provider TEXT NOT NULL CHECK (provider IN ('github', 'jira', 'google')),
+        status TEXT NOT NULL CHECK (status IN ('connected', 'disconnected')),
+        external_account_id TEXT,
+        display_name TEXT,
+        login TEXT,
+        email TEXT,
+        auth_method TEXT NOT NULL CHECK (auth_method IN ('oauth')),
+        connected_at TEXT,
+        metadata_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(user_id, provider),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      INSERT INTO user_provider_connections_new
+        SELECT * FROM user_provider_connections;
+
+      DROP TABLE user_provider_connections;
+
+      ALTER TABLE user_provider_connections_new RENAME TO user_provider_connections;
+
+      CREATE INDEX IF NOT EXISTS idx_user_provider_connections_user
+        ON user_provider_connections(user_id, provider);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_provider_connections_external
+        ON user_provider_connections(provider, external_account_id)
+        WHERE external_account_id IS NOT NULL;
+    `);
+  }
+
   const database = new AppDatabase(connection, {
     teamMembers: config.teamMembers,
     trackedRepos: config.trackedRepos,
-    defaultConnectionStatus: config.useRecordedFixtures ? "connected" : "pending"
+    defaultConnectionStatus: config.useRecordedFixtures ? "connected" : "pending",
+    encryptionSecret: config.sessionSecret
   });
 
   database.cleanupExpiredSessions();
