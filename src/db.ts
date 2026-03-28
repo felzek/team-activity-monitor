@@ -13,13 +13,16 @@ import type {
   AuditEventEntry,
   ConnectionStatus,
   ConnectorRecord,
+  ConversationEntry,
   InvitationEntry,
   LlmProvider,
   LlmProviderKey,
+  MessageEntry,
   OrganizationMemberEntry,
   OrganizationRole,
   OrganizationSettings,
   OrganizationSummary,
+  ProjectEntry,
   ProviderAuthProvider,
   ProviderAuthRequirement,
   ProviderAuthStatus,
@@ -125,6 +128,42 @@ interface LlmProviderKeyRow {
   display_label: string;
   encrypted_key: string;
   connected_at: string;
+  updated_at: string;
+}
+
+interface ConversationRow {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  project_id: string | null;
+  title: string;
+  pinned: number;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count?: number;
+  last_message_preview?: string | null;
+  last_message_at?: string | null;
+}
+
+interface MessageRow {
+  id: string;
+  conversation_id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  metadata_json: string | null;
+  created_at: string;
+}
+
+interface ProjectRow {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  icon: string | null;
+  archived_at: string | null;
+  created_at: string;
   updated_at: string;
 }
 
@@ -1520,6 +1559,382 @@ export class AppDatabase {
     }));
   }
 
+  // ── Conversations ──────────────────────────────────────────────────────
+
+  createConversation(input: {
+    organizationId: string;
+    userId: string;
+    title?: string;
+    projectId?: string;
+  }): ConversationEntry {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.connection
+      .prepare(
+        `INSERT INTO conversations (id, organization_id, user_id, project_id, title, pinned, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?)`
+      )
+      .run(id, input.organizationId, input.userId, input.projectId ?? null, input.title ?? "New chat", now, now);
+    return {
+      id,
+      organizationId: input.organizationId,
+      userId: input.userId,
+      projectId: input.projectId ?? null,
+      title: input.title ?? "New chat",
+      pinned: false,
+      archivedAt: null,
+      messageCount: 0,
+      lastMessagePreview: null,
+      lastMessageAt: null,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  getConversation(conversationId: string, userId: string): ConversationEntry | null {
+    const row = this.connection
+      .prepare(
+        `SELECT c.*,
+                (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS message_count,
+                (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
+                (SELECT created_at FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_at
+         FROM conversations c
+         WHERE c.id = ? AND c.user_id = ?`
+      )
+      .get(conversationId, userId) as ConversationRow | undefined;
+    return row ? this.mapConversationRow(row) : null;
+  }
+
+  listConversations(input: {
+    userId: string;
+    organizationId: string;
+    archived?: boolean;
+    projectId?: string | null;
+    pinnedOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }): { conversations: ConversationEntry[]; total: number } {
+    const conditions: string[] = ["c.user_id = ?", "c.organization_id = ?"];
+    const params: unknown[] = [input.userId, input.organizationId];
+
+    if (input.archived) {
+      conditions.push("c.archived_at IS NOT NULL");
+    } else {
+      conditions.push("c.archived_at IS NULL");
+    }
+
+    if (input.projectId !== undefined) {
+      if (input.projectId === null) {
+        conditions.push("c.project_id IS NULL");
+      } else {
+        conditions.push("c.project_id = ?");
+        params.push(input.projectId);
+      }
+    }
+
+    if (input.pinnedOnly) {
+      conditions.push("c.pinned = 1");
+    }
+
+    const where = conditions.join(" AND ");
+    const limit = input.limit ?? 50;
+    const offset = input.offset ?? 0;
+
+    const total = (
+      this.connection
+        .prepare(`SELECT COUNT(*) AS cnt FROM conversations c WHERE ${where}`)
+        .get(...params) as { cnt: number }
+    ).cnt;
+
+    const rows = this.connection
+      .prepare(
+        `SELECT c.*,
+                (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS message_count,
+                (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
+                (SELECT created_at FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_at
+         FROM conversations c
+         WHERE ${where}
+         ORDER BY c.pinned DESC, c.updated_at DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(...params, limit, offset) as ConversationRow[];
+
+    return {
+      conversations: rows.map((r) => this.mapConversationRow(r)),
+      total
+    };
+  }
+
+  updateConversation(
+    conversationId: string,
+    userId: string,
+    patch: { title?: string; pinned?: boolean; archived?: boolean; projectId?: string | null }
+  ): boolean {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    const now = new Date().toISOString();
+
+    if (patch.title !== undefined) {
+      sets.push("title = ?");
+      params.push(patch.title);
+    }
+    if (patch.pinned !== undefined) {
+      sets.push("pinned = ?");
+      params.push(patch.pinned ? 1 : 0);
+    }
+    if (patch.archived !== undefined) {
+      sets.push("archived_at = ?");
+      params.push(patch.archived ? now : null);
+    }
+    if (patch.projectId !== undefined) {
+      sets.push("project_id = ?");
+      params.push(patch.projectId);
+    }
+
+    if (sets.length === 0) return false;
+
+    sets.push("updated_at = ?");
+    params.push(now);
+    params.push(conversationId, userId);
+
+    const result = this.connection
+      .prepare(`UPDATE conversations SET ${sets.join(", ")} WHERE id = ? AND user_id = ?`)
+      .run(...params);
+    return result.changes > 0;
+  }
+
+  deleteConversation(conversationId: string, userId: string): boolean {
+    const result = this.connection
+      .prepare("DELETE FROM conversations WHERE id = ? AND user_id = ?")
+      .run(conversationId, userId);
+    return result.changes > 0;
+  }
+
+  searchConversations(input: {
+    userId: string;
+    organizationId: string;
+    query: string;
+    limit?: number;
+  }): ConversationEntry[] {
+    const limit = input.limit ?? 20;
+    const pattern = `%${input.query}%`;
+
+    const rows = this.connection
+      .prepare(
+        `SELECT DISTINCT c.*,
+                (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) AS message_count,
+                (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
+                (SELECT created_at FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_at
+         FROM conversations c
+         LEFT JOIN messages m ON m.conversation_id = c.id
+         WHERE c.user_id = ? AND c.organization_id = ? AND c.archived_at IS NULL
+           AND (c.title LIKE ? OR m.content LIKE ?)
+         ORDER BY c.updated_at DESC
+         LIMIT ?`
+      )
+      .all(input.userId, input.organizationId, pattern, pattern, limit) as ConversationRow[];
+
+    return rows.map((r) => this.mapConversationRow(r));
+  }
+
+  // ── Messages ──────────────────────────────────────────────────────────
+
+  addMessage(input: {
+    conversationId: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    metadata?: Record<string, unknown>;
+  }): MessageEntry {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
+
+    this.connection
+      .prepare(
+        `INSERT INTO messages (id, conversation_id, role, content, metadata_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.conversationId, input.role, input.content, metadataJson, now);
+
+    // Touch the conversation's updated_at
+    this.connection
+      .prepare("UPDATE conversations SET updated_at = ? WHERE id = ?")
+      .run(now, input.conversationId);
+
+    return {
+      id,
+      conversationId: input.conversationId,
+      role: input.role,
+      content: input.content,
+      metadata: input.metadata ?? null,
+      createdAt: now
+    };
+  }
+
+  listMessages(
+    conversationId: string,
+    userId: string,
+    opts?: { limit?: number; before?: string }
+  ): { messages: MessageEntry[]; hasMore: boolean } {
+    // Verify ownership
+    const conv = this.connection
+      .prepare("SELECT id FROM conversations WHERE id = ? AND user_id = ?")
+      .get(conversationId, userId) as { id: string } | undefined;
+    if (!conv) return { messages: [], hasMore: false };
+
+    const limit = (opts?.limit ?? 100) + 1;
+    let rows: MessageRow[];
+
+    if (opts?.before) {
+      rows = this.connection
+        .prepare(
+          `SELECT * FROM messages
+           WHERE conversation_id = ? AND created_at < ?
+           ORDER BY created_at DESC LIMIT ?`
+        )
+        .all(conversationId, opts.before, limit) as MessageRow[];
+    } else {
+      rows = this.connection
+        .prepare(
+          `SELECT * FROM messages
+           WHERE conversation_id = ?
+           ORDER BY created_at ASC LIMIT ?`
+        )
+        .all(conversationId, limit) as MessageRow[];
+    }
+
+    const hasMore = rows.length === limit;
+    if (hasMore) rows.pop();
+
+    // When fetching with "before", results come DESC — reverse to ASC
+    if (opts?.before) rows.reverse();
+
+    return {
+      messages: rows.map((r) => this.mapMessageRow(r)),
+      hasMore
+    };
+  }
+
+  // ── Projects ──────────────────────────────────────────────────────────
+
+  createProject(input: {
+    organizationId: string;
+    name: string;
+    description?: string;
+    instructions?: string;
+    icon?: string;
+  }): ProjectEntry {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.connection
+      .prepare(
+        `INSERT INTO projects (id, organization_id, name, description, instructions, icon, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.organizationId, input.name, input.description ?? null, input.instructions ?? null, input.icon ?? null, now, now);
+    return {
+      id,
+      organizationId: input.organizationId,
+      name: input.name,
+      description: input.description ?? null,
+      instructions: input.instructions ?? null,
+      icon: input.icon ?? null,
+      archivedAt: null,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  listProjects(organizationId: string, includeArchived = false): ProjectEntry[] {
+    const condition = includeArchived ? "" : " AND archived_at IS NULL";
+    const rows = this.connection
+      .prepare(`SELECT * FROM projects WHERE organization_id = ?${condition} ORDER BY name ASC`)
+      .all(organizationId) as ProjectRow[];
+    return rows.map((r) => this.mapProjectRow(r));
+  }
+
+  updateProject(
+    projectId: string,
+    organizationId: string,
+    patch: { name?: string; description?: string; instructions?: string; icon?: string; archived?: boolean }
+  ): boolean {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    const now = new Date().toISOString();
+
+    if (patch.name !== undefined) { sets.push("name = ?"); params.push(patch.name); }
+    if (patch.description !== undefined) { sets.push("description = ?"); params.push(patch.description); }
+    if (patch.instructions !== undefined) { sets.push("instructions = ?"); params.push(patch.instructions); }
+    if (patch.icon !== undefined) { sets.push("icon = ?"); params.push(patch.icon); }
+    if (patch.archived !== undefined) { sets.push("archived_at = ?"); params.push(patch.archived ? now : null); }
+
+    if (sets.length === 0) return false;
+
+    sets.push("updated_at = ?");
+    params.push(now);
+    params.push(projectId, organizationId);
+
+    const result = this.connection
+      .prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ? AND organization_id = ?`)
+      .run(...params);
+    return result.changes > 0;
+  }
+
+  deleteProject(projectId: string, organizationId: string): boolean {
+    // Unlink conversations first (ON DELETE SET NULL handles this, but be explicit)
+    this.connection
+      .prepare("UPDATE conversations SET project_id = NULL WHERE project_id = ?")
+      .run(projectId);
+    const result = this.connection
+      .prepare("DELETE FROM projects WHERE id = ? AND organization_id = ?")
+      .run(projectId, organizationId);
+    return result.changes > 0;
+  }
+
+  // ── Row Mappers ───────────────────────────────────────────────────────
+
+  private mapConversationRow(row: ConversationRow): ConversationEntry {
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      userId: row.user_id,
+      projectId: row.project_id,
+      title: row.title,
+      pinned: row.pinned === 1,
+      archivedAt: row.archived_at,
+      messageCount: row.message_count ?? 0,
+      lastMessagePreview: row.last_message_preview ?? null,
+      lastMessageAt: row.last_message_at ?? null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  private mapMessageRow(row: MessageRow): MessageEntry {
+    return {
+      id: row.id,
+      conversationId: row.conversation_id,
+      role: row.role,
+      content: row.content,
+      metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
+      createdAt: row.created_at
+    };
+  }
+
+  private mapProjectRow(row: ProjectRow): ProjectEntry {
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      name: row.name,
+      description: row.description,
+      instructions: row.instructions,
+      icon: row.icon,
+      archivedAt: row.archived_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
   close(): void {
     this.connection.close();
   }
@@ -1728,6 +2143,58 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
 
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
       ON sessions(expires_at);
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      instructions TEXT,
+      icon TEXT,
+      archived_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_projects_org
+      ON projects(organization_id, archived_at);
+
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      title TEXT NOT NULL DEFAULT 'New chat',
+      pinned INTEGER NOT NULL DEFAULT 0,
+      archived_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_org
+      ON conversations(user_id, organization_id, archived_at);
+
+    CREATE INDEX IF NOT EXISTS idx_conversations_project
+      ON conversations(project_id);
+
+    CREATE INDEX IF NOT EXISTS idx_conversations_updated
+      ON conversations(organization_id, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+      content TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation
+      ON messages(conversation_id, created_at);
   `);
 
   const needsProviderMigration = (() => {

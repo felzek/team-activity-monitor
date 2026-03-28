@@ -25,10 +25,18 @@ import {
 import type { AppConfig } from "./config.js";
 import { teamMemberSchema, trackedRepoSchema } from "./config.js";
 import type { AppDatabase } from "./db.js";
+import { ActivityCache, getSharedCache } from "./lib/cache.js";
+import { fetchGitHubDashboard } from "./dashboard/github.js";
+import { fetchJiraDashboard } from "./dashboard/jira.js";
+import { generateDashboardInsight } from "./lib/ollama.js";
+import { runChatTurn } from "./lib/chat-pipeline.js";
+import type { NormalizedChatMessage } from "./llm/types.js";
 import { AppError, isAppError, toErrorMessage } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
 import { buildGroundedResponsePrompt, generateGroundedResponse, RESPONSE_SYSTEM_PROMPT } from "./lib/llm-pipeline.js";
 import { syncGitHubProfileToOrg, syncJiraProfileToOrg } from "./lib/profile-sync.js";
+import { createGitHubWebhookHandler } from "./webhooks/github.js";
+import { createJiraWebhookHandler } from "./webhooks/jira.js";
 import {
   applyProviderAuthRuntime,
   buildProviderAuthorizationUrl,
@@ -40,12 +48,15 @@ import {
 import { createRateLimitMiddleware } from "./lib/rate-limit.js";
 import { AnthropicAdapter } from "./llm/adapters/anthropic.js";
 import { GeminiAdapter } from "./llm/adapters/gemini.js";
+import { OllamaAdapter } from "./llm/adapters/ollama.js";
 import { OpenAiAdapter } from "./llm/adapters/openai.js";
 import { LlmProviderRegistry } from "./llm/registry.js";
 import { LlmService } from "./llm/service.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
+import { createConversationsRouter } from "./routes/conversations.js";
+import { createIntelligenceRouter } from "./routes/intelligence.js";
 import { createLlmRouter } from "./routes/llm.js";
 import type { LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
@@ -77,7 +88,7 @@ function fallbackDisplayName(email: string, providedName?: string | null): strin
     .join(" ");
 }
 
-function applySecurityHeaders(app: express.Express): void {
+function applySecurityHeaders(app: express.Express, appEnv: string): void {
   app.disable("x-powered-by");
   app.use((_request, response, next) => {
     response.setHeader("X-Frame-Options", "DENY");
@@ -88,7 +99,7 @@ function applySecurityHeaders(app: express.Express): void {
       "Content-Security-Policy",
       [
         "default-src 'self'",
-        "script-src 'self'",
+        `script-src 'self'${appEnv === "development" ? " 'unsafe-eval'" : ""}`,
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data:",
         "connect-src 'self'",
@@ -336,13 +347,15 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   const app = express();
 
   // Build the LLM service once so it's accessible to all routes (query + /api/llm/*)
+  // OllamaAdapter is always registered — it returns empty list gracefully when not running.
   const llmRegistry = new LlmProviderRegistry()
     .register(new AnthropicAdapter())
     .register(new OpenAiAdapter())
-    .register(new GeminiAdapter());
+    .register(new GeminiAdapter())
+    .register(new OllamaAdapter(config.ollamaBaseUrl, config.ollamaModel, config.ollamaKeepAlive, logger));
   const llmService = new LlmService(llmRegistry, database, logger);
 
-  applySecurityHeaders(app);
+  applySecurityHeaders(app, config.appEnv);
   app.use(createHttpLogger());
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
@@ -371,6 +384,11 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   app.use(express.static(path.resolve(process.cwd(), "public"), { index: false }));
   app.use("/api", requireCsrf);
 
+  // ── Sub-routers ────────────────────────────────────────────────────────────
+  app.use("/api/llm", createLlmRouter(llmService, logger));
+  app.use(createIntelligenceRouter(config, database, logger));
+  app.use(createConversationsRouter(database, logger));
+
   app.get("/", (_request, response) => {
     sendPublicFile(response, "index.html");
   });
@@ -383,12 +401,10 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     sendPublicFile(response, "register.html");
   });
 
-  app.get("/app", requireAuthPage, (_request, response) => {
-    sendPublicFile(response, "dashboard.html");
-  });
-
-  app.get("/intelligence", requireAuthPage, (_request, response) => {
-    sendPublicFile(response, "intelligence.html");
+  // ── React SPA routes — serve the compiled Vite bundle ──────────────────────
+  const SPA_INDEX = path.resolve(process.cwd(), "public/app/index.html");
+  app.get(["/app", "/app/*splat", "/intelligence", "/chat", "/settings", "/settings/*splat"], requireAuthPage, (_request, response) => {
+    response.sendFile(SPA_INDEX);
   });
 
   app.get("/docs", (_request, response) => {
@@ -1473,34 +1489,23 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       }
 
       // Route to the provider determined by the model ID prefix.
-      // Cloud model failures propagate as errors — no silent fallback to Ollama.
+      // All model IDs ("local:*", "openai:*", "claude:*", "gemini:*") are handled by
+      // LlmService → LlmProviderRegistry → adapter. No silent Ollama fallback.
       const requestedModelId =
         typeof request.body?.modelId === "string" ? request.body.modelId.trim() : "";
+      // When no model is explicitly selected, default to the configured local model.
+      const effectiveModelId = requestedModelId || `local:${executionConfig.ollamaModel}`;
 
-      let responseText: string;
-      let modelUsed: string | null = null;
-
-      if (requestedModelId.startsWith("local:")) {
-        // Explicit local Ollama model (e.g. "local:qwen2.5:7b")
-        const localModelName = requestedModelId.slice("local:".length);
-        responseText = await generateGroundedResponse(executionConfig, summary, requestLogger, localModelName);
-        modelUsed = requestedModelId;
-      } else if (requestedModelId) {
-        // Cloud provider model — LlmError propagates to error middleware if unavailable.
-        const chatResp = await llmService.chat(request.session.userId!, {
-          modelId: requestedModelId,
-          messages: [
-            { role: "system", content: RESPONSE_SYSTEM_PROMPT },
-            { role: "user", content: buildGroundedResponsePrompt(summary) }
-          ]
-        });
-        responseText = chatResp.message.content;
-        modelUsed = requestedModelId;
-        requestLogger.info({ modelId: requestedModelId }, "Generated grounded response via LLM provider");
-      } else {
-        // No model selected — use local Ollama default.
-        responseText = await generateGroundedResponse(executionConfig, summary, requestLogger);
-      }
+      const chatResp = await llmService.chat(request.session.userId!, {
+        modelId: effectiveModelId,
+        messages: [
+          { role: "system", content: RESPONSE_SYSTEM_PROMPT },
+          { role: "user", content: buildGroundedResponsePrompt(summary) }
+        ]
+      });
+      const responseText = chatResp.message.content;
+      const modelUsed = effectiveModelId;
+      requestLogger.info({ modelId: effectiveModelId }, "Generated grounded response via LLM service");
 
       const queryRun = database.saveQueryRun({
         organizationId: organization.id,
@@ -1602,6 +1607,160 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         generatedAt: new Date().toISOString(),
         error: text === null ? "AI insight unavailable — ensure Ollama is running." : null
       });
+    }
+  );
+
+  // ── Webhook Routes ────────────────────────────────────────────────────────
+  // Webhooks require the raw body for HMAC verification. We mount them AFTER
+  // express.json() so that normal routes get parsed JSON, but the webhook routes
+  // get raw Buffer via a per-route middleware.
+
+  const cache: ActivityCache = getSharedCache();
+
+  const rawBodyCapture = express.raw({ type: "application/json", limit: "2mb" });
+
+  // GitHub webhooks bypass CSRF (they come from GitHub, not a browser session)
+  const githubWebhookHandler = createGitHubWebhookHandler(database, cache, logger);
+  app.post("/webhooks/github", rawBodyCapture, (req, _res, next) => {
+    // Attach raw body for HMAC verification; re-parse JSON for event handling
+    const raw = req as express.Request & { rawBody?: Buffer };
+    if (Buffer.isBuffer(req.body)) {
+      raw.rawBody = req.body;
+      try {
+        (req as express.Request & { body: unknown }).body = JSON.parse(req.body.toString("utf8")) as unknown;
+      } catch {
+        (req as express.Request & { body: unknown }).body = {};
+      }
+    }
+    next();
+  }, githubWebhookHandler);
+
+  const jiraWebhookHandler = createJiraWebhookHandler(database, cache, logger);
+  app.post("/webhooks/jira", jiraWebhookHandler);
+
+  // ── Chat Endpoint ──────────────────────────────────────────────────────────
+  // Stateless per-request tool-first chat. Conversation history is passed
+  // by the client (simple array of messages). Sessions in SQLite are out of
+  // scope for the MVP — clients hold history in-memory.
+
+  app.post(
+    "/api/v1/chat",
+    requireAuth,
+    requireOrganization(database),
+    async (request, response) => {
+      const { userId, currentOrganizationId } = request.session;
+      if (!userId || !currentOrganizationId) {
+        response.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+
+      const bodySchema = z.object({
+        message: z.string().min(1).max(4096),
+        modelId: z.string().min(1),
+        conversationId: z.string().optional(),
+        history: z.array(z.object({
+          role: z.enum(["user", "assistant"]),
+          content: z.string()
+        })).max(50).default([])
+      });
+
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ error: "Invalid request", details: parsed.error.issues });
+        return;
+      }
+
+      const { message, modelId, conversationId, history: rawHistory } = parsed.data;
+
+      const organization = database.getOrganizationForUser(userId, currentOrganizationId);
+      if (!organization) {
+        response.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      const orgSettings = database.getOrganizationSettings(organization.id);
+      const executionConfig = { ...config, teamMembers: orgSettings.teamMembers, trackedRepos: orgSettings.trackedRepos };
+
+      // Load OAuth tokens
+      const [userGitHubToken, userJiraToken] = await Promise.all([
+        getActiveProviderToken(userId, "github", config, database, logger),
+        getActiveProviderToken(userId, "jira", config, database, logger)
+      ]);
+      const userJiraConnection = database.getUserProviderConnection(userId, "jira");
+      const jiraSiteId = userJiraConnection?.metadata?.siteId as string | undefined;
+
+      // Reconstruct conversation history (user+assistant only — tool turns are internal)
+      const history: NormalizedChatMessage[] = rawHistory.map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      const requestLogger = logger.child({ userId, orgId: organization.id, route: "chat" });
+
+      try {
+        const result = await runChatTurn(message, history, llmService, {
+          userId,
+          organizationId: organization.id,
+          modelId,
+          timezone: config.appTimezone,
+          githubToken: userGitHubToken,
+          jiraToken: userJiraToken,
+          jiraSiteId,
+          teamMembers: orgSettings.teamMembers,
+          config: executionConfig,
+          database,
+          logger: requestLogger,
+          cache
+        });
+
+        // Persist messages if a conversationId was provided
+        let activeConversationId = conversationId;
+        try {
+          if (activeConversationId) {
+            database.addMessage({ conversationId: activeConversationId, role: "user", content: message });
+            database.addMessage({
+              conversationId: activeConversationId,
+              role: "assistant",
+              content: result.answer,
+              metadata: {
+                toolsUsed: result.toolsUsed,
+                sources: result.sources,
+                tokenUsage: result.tokenUsage,
+                totalLatencyMs: result.totalLatencyMs,
+              },
+            });
+          }
+        } catch {
+          // Non-fatal: message persistence should not break the response
+        }
+
+        // Log to audit trail
+        try {
+          database.recordAuditEvent({
+            organizationId: organization.id,
+            actorUserId: userId,
+            eventType: "chat.turn",
+            targetType: "query",
+            metadata: {
+              conversationId: activeConversationId,
+              toolsUsed: result.toolsUsed,
+              tokenUsage: result.tokenUsage,
+              latencyMs: result.totalLatencyMs,
+              partialFailures: result.partialFailures.length
+            }
+          });
+        } catch {
+          // Non-fatal
+        }
+
+        response.json({ ...result, conversationId: activeConversationId });
+      } catch (err) {
+        requestLogger.error({ err }, "Chat turn failed");
+        response.status(500).json({
+          error: toErrorMessage(err),
+          code: "CHAT_PIPELINE_ERROR"
+        });
+      }
     }
   );
 
