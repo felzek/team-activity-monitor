@@ -31,6 +31,7 @@ import { fetchJiraDashboard } from "./dashboard/jira.js";
 import { generateDashboardInsight } from "./lib/ollama.js";
 import { runChatTurn } from "./lib/chat-pipeline.js";
 import type { NormalizedChatMessage } from "./llm/types.js";
+import { sendInvitationEmail } from "./lib/email.js";
 import { AppError, isAppError, toErrorMessage } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
 import { buildGroundedResponsePrompt, generateGroundedResponse, RESPONSE_SYSTEM_PROMPT } from "./lib/llm-pipeline.js";
@@ -1128,8 +1129,15 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     requireOrganization(database),
     (request, response) => {
       const organizationId = routeOrganizationId(request)!;
+      const members = database.listOrganizationMembers(organizationId);
       response.json({
-        items: database.listOrganizationMembers(organizationId)
+        members: members.map((m) => ({
+          id: m.userId,
+          displayName: m.name,
+          email: m.email,
+          role: m.role,
+          joinedAt: m.joinedAt
+        }))
       });
     }
   );
@@ -1141,7 +1149,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     (request, response) => {
       const organizationId = routeOrganizationId(request)!;
       response.json({
-        items: database.listInvitations(organizationId, config.appBaseUrl)
+        invitations: database.listInvitations(organizationId, config.appBaseUrl)
       });
     }
   );
@@ -1150,20 +1158,21 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     "/api/v1/orgs/:orgId/invitations",
     requireAuth,
     requireOrganization(database, ["owner", "admin"]),
-    (request, response) => {
+    async (request, response) => {
       const organizationId = routeOrganizationId(request)!;
+      const userId = request.session.userId!;
       const input = validateInviteInput(request.body ?? {});
       const invitation = database.createInvitation({
         organizationId,
         email: input.email,
         role: input.role,
-        createdByUserId: request.session.userId!,
+        createdByUserId: userId,
         baseUrl: config.appBaseUrl
       });
 
       database.recordAuditEvent({
         organizationId,
-        actorUserId: request.session.userId!,
+        actorUserId: userId,
         eventType: "invitation.created",
         targetType: "invitation",
         targetId: invitation.id,
@@ -1173,8 +1182,20 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         }
       });
 
+      // Send the invitation email
+      const inviter = database.findUserById(userId);
+      const organization = database.getOrganizationForUser(userId, organizationId);
+      const emailSent = await sendInvitationEmail(config, logger, {
+        to: invitation.email,
+        inviterName: inviter?.name ?? "A teammate",
+        organizationName: organization?.name ?? "your team",
+        role: invitation.role,
+        inviteUrl: invitation.inviteUrl
+      });
+
       response.status(201).json({
-        invitation
+        invitation,
+        emailSent
       });
     }
   );

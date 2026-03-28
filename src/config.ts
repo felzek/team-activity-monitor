@@ -60,7 +60,9 @@ const envSchema = z.object({
   OLLAMA_KEEP_ALIVE: z.string().default("10m"),
   COGNITO_USER_POOL_ID: z.string().optional(),
   COGNITO_APP_CLIENT_ID: z.string().optional(),
-  COGNITO_DOMAIN: z.string().optional()
+  COGNITO_DOMAIN: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("Team Activity <noreply@yourdomain.com>")
 });
 
 export const teamMemberSchema = z.object({
@@ -112,6 +114,8 @@ export interface AppConfig {
   cognitoUserPoolId?: string;
   cognitoAppClientId?: string;
   cognitoDomain?: string;
+  resendApiKey?: string;
+  emailFrom: string;
   teamMembers: TeamMember[];
   trackedRepos: TrackedRepo[];
 }
@@ -221,6 +225,8 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     cognitoUserPoolId: parsedEnv.COGNITO_USER_POOL_ID,
     cognitoAppClientId: parsedEnv.COGNITO_APP_CLIENT_ID,
     cognitoDomain: parsedEnv.COGNITO_DOMAIN,
+    resendApiKey: parsedEnv.RESEND_API_KEY,
+    emailFrom: parsedEnv.EMAIL_FROM,
     teamMembers,
     trackedRepos
   };
