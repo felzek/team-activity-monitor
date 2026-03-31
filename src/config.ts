@@ -54,7 +54,16 @@ const envSchema = z.object({
   GITHUB_OAUTH_SCOPE: scopeString.default(["repo", "read:user", "user:email"]),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_OAUTH_SCOPE: scopeString.default(["openid", "email", "profile"]),
+  GOOGLE_OAUTH_SCOPE: scopeString.default([
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/presentations"
+  ]),
+  GOOGLE_PICKER_API_KEY: z.string().optional(),
   OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434/api"),
   OLLAMA_MODEL: z.string().default("qwen2.5:7b"),
   OLLAMA_KEEP_ALIVE: z.string().default("10m"),
@@ -108,6 +117,7 @@ export interface AppConfig {
   googleOAuthClientId?: string;
   googleOAuthClientSecret?: string;
   googleOAuthScope: string[];
+  googlePickerApiKey?: string;
   ollamaBaseUrl: string;
   ollamaModel: string;
   ollamaKeepAlive: string;
@@ -219,6 +229,7 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     googleOAuthClientId: parsedEnv.GOOGLE_OAUTH_CLIENT_ID,
     googleOAuthClientSecret: parsedEnv.GOOGLE_OAUTH_CLIENT_SECRET,
     googleOAuthScope: parsedEnv.GOOGLE_OAUTH_SCOPE,
+    googlePickerApiKey: parsedEnv.GOOGLE_PICKER_API_KEY,
     ollamaBaseUrl: parsedEnv.OLLAMA_BASE_URL,
     ollamaModel: parsedEnv.OLLAMA_MODEL,
     ollamaKeepAlive: parsedEnv.OLLAMA_KEEP_ALIVE,

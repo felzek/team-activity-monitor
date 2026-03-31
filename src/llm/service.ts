@@ -10,8 +10,11 @@ import type {
   ProviderHealth,
 } from "./types.js";
 
-/** Provider display priority — lower = shown first in model list */
-const PROVIDER_PRIORITY: Record<string, number> = { claude: 0, openai: 1, gemini: 2 };
+/**
+ * Provider display priority — lower = shown first in sorted results.
+ * local is intentionally last since the UI groups local models separately.
+ */
+const PROVIDER_PRIORITY: Record<string, number> = { claude: 0, openai: 1, gemini: 2, local: 99 };
 
 export class LlmService {
   constructor(
@@ -22,6 +25,7 @@ export class LlmService {
 
   /**
    * Aggregate chat-capable models from all connected providers for this user.
+   * Cloud providers use API keys from the DB; local Ollama does not need a key.
    * Providers that fail to respond are silently omitted (logged as warnings).
    */
   async listModels(userId: string): Promise<NormalizedModel[]> {
@@ -55,6 +59,16 @@ export class LlmService {
       if (result.status === "fulfilled") models.push(...result.value);
     }
 
+    // Local Ollama does not require a stored API key — always attempt to list
+    if (this.registry.hasAdapter("local")) {
+      try {
+        const localModels = await this.registry.getAdapter("local").listModels("");
+        models.push(...localModels);
+      } catch {
+        // Ollama not running — omit local models silently
+      }
+    }
+
     return models.sort((a, b) => {
       const pp = (PROVIDER_PRIORITY[a.provider] ?? 9) - (PROVIDER_PRIORITY[b.provider] ?? 9);
       return pp !== 0 ? pp : a.sortOrder - b.sortOrder;
@@ -63,18 +77,25 @@ export class LlmService {
 
   /**
    * Route a chat request to the correct provider based on the namespaced modelId.
+   * Local models ("local:*") do not require a stored API key.
    * Throws LlmError for missing keys, unknown providers, or adapter failures.
    */
   async chat(userId: string, request: NormalizedChatRequest): Promise<NormalizedChatResponse> {
     const { provider, providerModelId } = LlmProviderRegistry.parseModelId(request.modelId);
 
-    const apiKey = this.database.decryptLlmProviderKey(userId, provider);
-    if (!apiKey) {
-      throw new LlmError(`No ${provider} API key saved yet. Add it in Settings → LLM providers first (paste and Save key).`, {
-        llmCode: "configuration_error",
-        provider,
-        statusCode: 422,
-      });
+    let apiKey: string;
+    if (provider === "local") {
+      // Ollama does not require a stored key — use the registered adapter directly
+      apiKey = "";
+    } else {
+      const stored = this.database.decryptLlmProviderKey(userId, provider);
+      if (!stored) {
+        throw new LlmError(
+          `No ${provider} API key saved yet. Add it in Settings → LLM providers first (paste and Save key).`,
+          { llmCode: "configuration_error", provider, statusCode: 422 }
+        );
+      }
+      apiKey = stored;
     }
 
     const adapter = this.registry.getAdapter(provider);
@@ -82,7 +103,7 @@ export class LlmService {
     try {
       const resp = await adapter.chat(apiKey, {
         ...request,
-        modelId: providerModelId, // pass raw provider ID to the adapter
+        modelId: providerModelId, // pass raw provider model ID to the adapter
       });
       // Return the caller's original namespaced modelId, not the raw provider ID
       return { ...resp, modelId: request.modelId };
@@ -92,7 +113,7 @@ export class LlmService {
   }
 
   /**
-   * Check connectivity for all connected providers.
+   * Check connectivity for all connected providers, including local Ollama.
    * Uses adapter.healthCheck() when available, falls back to listing models.
    */
   async getProviderHealth(userId: string): Promise<ProviderHealth[]> {
@@ -145,8 +166,24 @@ export class LlmService {
       })
     );
 
-    return results
+    const healths: ProviderHealth[] = results
       .filter((r): r is PromiseFulfilledResult<ProviderHealth> => r.status === "fulfilled")
       .map((r) => r.value);
+
+    // Always check local Ollama health (no DB key needed)
+    if (this.registry.hasAdapter("local")) {
+      const localAdapter = this.registry.getAdapter("local");
+      if (localAdapter.healthCheck) {
+        const localHealth = await localAdapter.healthCheck("").catch((): ProviderHealth => ({
+          provider: "local",
+          status: "unavailable",
+          error: "Health check failed",
+          checkedAt: new Date().toISOString(),
+        }));
+        healths.push(localHealth);
+      }
+    }
+
+    return healths;
   }
 }

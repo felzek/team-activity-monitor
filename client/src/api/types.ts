@@ -146,4 +146,54 @@ export interface ChatTurnResult {
   partialFailures: PartialFailure[];
   sources?: SourceBadge[];
   stoppedEarly?: boolean;
+  artifactSuggestions?: ArtifactSuggestion[];
+}
+
+// ── Artifacts ──
+
+export type ArtifactKind =
+  | "google_doc"
+  | "google_sheet"
+  | "google_slides"
+  | "chart"
+  | "xlsx_export"
+  | "pptx_export"
+  | "pdf_export";
+
+export type ArtifactStatus = "creating" | "ready" | "failed";
+
+export interface ArtifactSuggestion {
+  kind: ArtifactKind;
+  title: string;
+  description: string;
+  spec: Record<string, unknown>;
+}
+
+export interface ArtifactMetadata {
+  id: string;
+  kind: ArtifactKind;
+  status: ArtifactStatus;
+  title: string;
+  driveFileId: string | null;
+  webViewLink: string | null;
+  mimeType: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateArtifactRequest {
+  kind: ArtifactKind;
+  title: string;
+  spec: Record<string, unknown>;
+  conversationId?: string;
+  messageId?: string;
+  driveFolderId?: string;
+}
+
+export interface GooglePickerConfig {
+  clientId: string | null;
+  apiKey: string | null;
+  hasToken: boolean;
+  scopes: string;
 }

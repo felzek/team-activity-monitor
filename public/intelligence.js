@@ -772,6 +772,35 @@
     state.csrfToken = session.csrfToken;
     state.orgId = session.currentOrganization?.id || null;
 
+    // Restore filter context if navigated here from the dashboard with a
+    // person/timeRange param (e.g., after clicking "Full board ↗")
+    if (typeof IntelState !== 'undefined') {
+      IntelState.fromUrl();
+      const filter = IntelState.getFilter();
+      if (filter.person) {
+        // Show a dismissable context banner so the user knows the board is
+        // contextualised and can easily return to the full team view.
+        const titleArea = document.querySelector('.intel-page-title-area');
+        if (titleArea && !document.getElementById('intel-ctx-banner')) {
+          const banner = document.createElement('div');
+          banner.id = 'intel-ctx-banner';
+          banner.className = 'intel-ctx-banner';
+          banner.innerHTML =
+            'Contextualised for <strong>' + esc(filter.person) + '</strong>'
+            + ' &mdash; <button id="intel-ctx-clear" class="intel-ctx-clear-btn" type="button">View all team</button>';
+          titleArea.appendChild(banner);
+          document.getElementById('intel-ctx-clear')?.addEventListener('click', () => {
+            if (typeof IntelState !== 'undefined') IntelState.reset();
+            window.history.replaceState({}, document.title, '/intelligence');
+            banner.remove();
+          });
+        }
+        // Update subtitle
+        const sub = document.querySelector('.intel-subtitle');
+        if (sub) sub.textContent = 'Filtered to ' + filter.person + ' \u2014 last 7 days';
+      }
+    }
+
     updateTopNav(session);
     initTabNavigation();
     initSubTabNavigation('github-subtab-bar', 'gh-subtab-content', (id) => { state.activeGhSubtab = id; });

@@ -12,8 +12,6 @@ const orgRole = document.getElementById("org-role");
 const orgSlug = document.getElementById("org-slug");
 const lastUpdated = document.getElementById("last-updated");
 const memberCount = document.getElementById("member-count");
-const queryCount = document.getElementById("query-count");
-const auditCount = document.getElementById("audit-count");
 const logoutButton = document.getElementById("logout-button");
 const orgSelector = document.getElementById("org-selector");
 const tabWorkspace = document.getElementById("tab-workspace");
@@ -54,6 +52,17 @@ const githubEnabled = document.getElementById("github-enabled");
 const jiraStatus = document.getElementById("jira-status");
 const githubStatus = document.getElementById("github-status");
 const inviteForm = document.getElementById("invite-form");
+
+// New redesigned elements
+const setupBanner = document.getElementById("setup-banner");
+const setupBannerText = document.getElementById("setup-banner-text");
+const setupBannerCta = document.getElementById("setup-banner-cta");
+const setupBannerKeysCta = document.getElementById("setup-banner-keys-cta");
+const githubAuthDot = document.getElementById("github-auth-dot");
+const jiraAuthDot = document.getElementById("jira-auth-dot");
+const githubAuthPill = document.getElementById("github-auth-pill");
+const jiraAuthPill = document.getElementById("jira-auth-pill");
+const settingsOrgName = document.getElementById("settings-org-name");
 
 const LLM_PROVIDERS = ["openai", "gemini", "claude"];
 const LLM_PROVIDER_SETUP = {
@@ -321,8 +330,8 @@ function switchView(view) {
 
 function openLlmProvidersSettings() {
   switchView("settings");
+  switchSettingsPane("integrations");
   window.setTimeout(() => {
-    document.getElementById("llm-providers-settings")?.scrollIntoView({ behavior: "smooth", block: "start" });
     document.getElementById("llm-openai-key-input")?.focus();
   }, 50);
 }
@@ -336,7 +345,6 @@ function renderDataList(element, items, emptyMessage, formatter) {
 }
 
 function renderHistory(items) {
-  queryCount.textContent = String(items.length);
   renderDataList(
     historyList,
     items,
@@ -361,7 +369,7 @@ function renderHistory(items) {
 }
 
 function renderMembers(items) {
-  memberCount.textContent = String(items.length);
+  if (memberCount) memberCount.textContent = String(items.length);
   renderDataList(
     membersList,
     items,
@@ -397,7 +405,6 @@ function renderInvitations(items) {
 }
 
 function renderAuditEvents(items) {
-  auditCount.textContent = String(items.length);
   renderDataList(
     auditList,
     items,
@@ -512,7 +519,53 @@ function renderProviderAuth(providerAuth) {
     connectJiraAuthButton,
     disconnectJiraAuthButton
   );
+
+  // Update compact source health pills
+  const ghConnected = providerAuth?.github?.status === "connected";
+  const jiraConnected = providerAuth?.jira?.status === "connected";
+
+  if (githubAuthDot) {
+    githubAuthDot.className = `source-dot ${ghConnected ? "connected" : "disconnected"}`;
+  }
+  if (jiraAuthDot) {
+    jiraAuthDot.className = `source-dot ${jiraConnected ? "connected" : "disconnected"}`;
+  }
+  if (githubAuthPill) {
+    githubAuthPill.className = `source-pill-compact ${ghConnected ? "is-connected" : "is-disconnected"}`;
+  }
+  if (jiraAuthPill) {
+    jiraAuthPill.className = `source-pill-compact ${jiraConnected ? "is-connected" : "is-disconnected"}`;
+  }
+
+  // Compact setup banner
+  updateSetupBanner(providerAuth);
+
   setQueryAvailability(providerAuth);
+}
+
+function updateSetupBanner(providerAuth) {
+  if (!setupBanner) return;
+
+  const allConnected = providerAuth?.allConnected;
+  const hasAnyKey = llmProviderKeys.length > 0;
+
+  if (allConnected && hasAnyKey) {
+    setupBanner.classList.add("hidden");
+    return;
+  }
+
+  setupBanner.classList.remove("hidden");
+
+  if (!allConnected) {
+    const missing = providerAuth?.missingProviders?.join(" and ") || "GitHub and Jira";
+    setupBannerText.textContent = `Connect ${missing} to start querying your team's activity.`;
+    setupBannerCta.classList.remove("hidden");
+    setupBannerKeysCta.classList.toggle("hidden", hasAnyKey);
+  } else if (!hasAnyKey) {
+    setupBannerText.textContent = "Add an LLM API key in Settings to use cloud models, or use the free local model.";
+    setupBannerCta.classList.add("hidden");
+    setupBannerKeysCta.classList.remove("hidden");
+  }
 }
 
 function applyProviderAuthStatusFromLocation() {
@@ -831,7 +884,6 @@ function renderQueryResponse(payload) {
   responseShell.classList.remove("is-empty", "is-loading");
   responseEmpty.classList.add("hidden");
   responseStructured.classList.remove("hidden");
-  responseShell.scrollTop = 0; // always start at top of the fixed box
   summaryTitle.textContent = summary.needsClarification
     ? "Need a clearer teammate match"
     : `Activity summary for ${summary.member.displayName}`;
@@ -852,17 +904,12 @@ function renderQueryResponse(payload) {
 
   lastUpdated.textContent = `Last updated ${formatDateTime(new Date().toISOString())}`;
 
-  // Show which model was used (provider model or local fallback)
-  if (responseModelBadge) {
-    if (payload.modelUsed) {
-      const model = chatModels.find((m) => m.id === payload.modelUsed);
-      const label = model ? model.displayName : payload.modelUsed;
-      responseModelBadge.textContent = `Generated by ${label}`;
-      responseModelBadge.classList.remove("hidden");
-    } else {
-      responseModelBadge.textContent = "Generated by Qwen 2.5 7B (local)";
-      responseModelBadge.classList.remove("hidden");
-    }
+  // Show which model was used
+  if (responseModelBadge && payload.modelUsed) {
+    const model = chatModels.find((m) => m.id === payload.modelUsed);
+    const label = model ? model.displayName : payload.modelUsed;
+    responseModelBadge.textContent = `Generated by ${label}`;
+    responseModelBadge.classList.remove("hidden");
   }
 
 }
@@ -904,7 +951,7 @@ function renderLlmProviderCards(keys) {
     if (dom.settingsStatus) {
       dom.settingsStatus.textContent = key
         ? `Saved · ${escapeHtml(key.maskedKey)} · updated ${formatDateTime(key.updatedAt)}`
-        : "No key saved yet. Use the steps above, paste your key, then click Save key.";
+        : "No key saved.";
     }
     if (dom.remove) {
       dom.remove.classList.toggle("hidden", !key);
@@ -913,6 +960,9 @@ function renderLlmProviderCards(keys) {
       dom.keyInput.placeholder = key.maskedKey;
     }
   }
+
+  // Refresh setup banner state when keys change
+  if (providerAuthState) updateSetupBanner(providerAuthState);
 }
 
 function promptLlmApiKey(provider) {
@@ -990,11 +1040,12 @@ async function loadSession() {
   userName.textContent = payload.user.name;
   orgName.textContent = payload.currentOrganization?.name || "No organization";
   orgRole.textContent = payload.currentOrganization
-    ? `Role: ${payload.currentOrganization.role}`
-    : "Role unavailable";
-  orgSlug.textContent = payload.currentOrganization?.slug || "-";
-  renderProviderAuth(payload.providerAuth);
+    ? payload.currentOrganization.role
+    : "";
+  if (orgSlug) orgSlug.textContent = payload.currentOrganization?.slug || "-";
+  if (settingsOrgName) settingsOrgName.textContent = payload.currentOrganization?.name || "-";
   renderLlmProviderCards(payload.llmProviderKeys || []);
+  renderProviderAuth(payload.providerAuth);
   renderOrganizations();
 }
 
@@ -1014,15 +1065,14 @@ async function loadWorkspaceData() {
     api(`/api/v1/orgs/${currentOrganizationId}/audit-events`)
   ]);
 
-  memberCount.textContent = String(members.items.length);
-  queryCount.textContent = String(history.items.length);
-  auditCount.textContent = String(auditEvents.items.length);
+  if (memberCount) memberCount.textContent = String(members.items.length);
   renderPromptChips(members.items);
 
   const currentOrganization = organizations.find((organization) => organization.id === currentOrganizationId);
   orgName.textContent = currentOrganization?.name || "No organization";
   orgRole.textContent = currentOrganization ? `Role: ${currentOrganization.role}` : "Role unavailable";
-  orgSlug.textContent = currentOrganization?.slug || "-";
+  if (orgSlug) orgSlug.textContent = currentOrganization?.slug || "-";
+  if (settingsOrgName) settingsOrgName.textContent = currentOrganization?.name || "-";
 
   if (!providerAuthState?.allConnected) {
     const missing = providerAuthState?.missingProviders?.join(" and ") || "GitHub and Jira";
@@ -1209,6 +1259,14 @@ async function runQuery(event) {
     stopStages();
     renderQueryResponse(payload);
 
+    // Notify Intelligence Overview so it can refresh with latest team state
+    if (typeof IntelState !== "undefined") {
+      IntelState.emit("queryComplete", {
+        query,
+        member: payload.summary?.member?.displayName || null
+      });
+    }
+
     if (payload.summary?.needsClarification) {
       setBanner(payload.summary.clarificationReason || "Clarification is required.", "warning");
     } else if (payload.partialData) {
@@ -1337,6 +1395,40 @@ async function logout() {
   window.location.href = "/";
 }
 
+// ── Settings sidebar navigation ─────────────────────────────────────────────
+function switchSettingsPane(sectionName) {
+  document.querySelectorAll("[data-settings-pane]").forEach((pane) => {
+    pane.classList.toggle("hidden", pane.dataset.settingsPane !== sectionName);
+  });
+  document.querySelectorAll("[data-settings-nav]").forEach((link) => {
+    link.classList.toggle("is-active", link.dataset.settingsNav === sectionName);
+  });
+}
+
+document.querySelectorAll("[data-settings-nav]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    switchSettingsPane(link.dataset.settingsNav);
+  });
+});
+
+// ── Setup banner actions ─────────────────────────────────────────────────────
+if (setupBannerCta) {
+  setupBannerCta.addEventListener("click", () => {
+    // Connect first missing provider
+    const missing = providerAuthState?.missingProviders || [];
+    if (missing.length > 0) {
+      connectProviderAuth(missing[0]);
+    }
+  });
+}
+
+if (setupBannerKeysCta) {
+  setupBannerKeysCta.addEventListener("click", () => {
+    openLlmProvidersSettings();
+  });
+}
+
 queryForm.addEventListener("submit", runQuery);
 logoutButton.addEventListener("click", logout);
 queryInput.addEventListener("keydown", (event) => {
@@ -1348,7 +1440,6 @@ queryInput.addEventListener("keydown", (event) => {
 orgSelector.addEventListener("change", switchOrganization);
 tabWorkspace.addEventListener("click", () => switchView("workspace"));
 tabSettings.addEventListener("click", () => switchView("settings"));
-document.getElementById("llm-callout-open-settings")?.addEventListener("click", () => openLlmProvidersSettings());
 inviteForm.addEventListener("submit", createInvite);
 settingsForm.addEventListener("submit", saveSettings);
 jiraForm.addEventListener("submit", (event) => {
@@ -1531,6 +1622,18 @@ function handleModelSelectChange() {
 
 modelSelect.addEventListener("change", handleModelSelectChange);
 
+// ── Intelligence Overview integration ─────────────────────────────────────────
+// Wire seedQuery once so IntelOverview can populate the query textarea and
+// bring the user back to the workspace view without extra dashboard.js changes.
+if (typeof IntelState !== "undefined") {
+  IntelState.on("seedQuery", (text) => {
+    if (text) queryInput.value = text;
+    switchView("workspace");
+    queryInput.focus();
+    queryInput.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
 Promise.resolve()
   .then(loadSession)
   .then(async () => {
@@ -1538,6 +1641,10 @@ Promise.resolve()
       await loadWorkspaceData();
     } catch {
       /* workspace data is non-critical; tabs still work */
+    }
+    // Init the overview after we have orgId and csrfToken
+    if (currentOrganizationId && typeof IntelOverview !== "undefined") {
+      IntelOverview.init(currentOrganizationId);
     }
   })
   .then(loadChatModels)

@@ -10,10 +10,13 @@
 import { LlmError, normalizeProviderError } from "../errors.js";
 import type {
   LlmProviderAdapter,
+  NormalizedChatMessage,
   NormalizedChatRequest,
   NormalizedChatResponse,
   NormalizedModel,
   ProviderHealth,
+  ToolCall,
+  ToolDefinition,
 } from "../types.js";
 
 const BASE_URL = "https://api.anthropic.com/v1";
@@ -76,6 +79,50 @@ function modelSortOrder(id: string): number {
   return 50;
 }
 
+/**
+ * Convert normalized messages to Anthropic API format.
+ * Anthropic uses multi-part content arrays for tool_use / tool_result blocks.
+ */
+function toAnthropicMessages(
+  messages: NormalizedChatMessage[]
+): Array<{ role: string; content: unknown }> {
+  const result: Array<{ role: string; content: unknown }> = [];
+
+  // Group consecutive tool-result messages under a single "user" turn
+  let i = 0;
+  while (i < messages.length) {
+    const msg = messages[i];
+
+    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      // Build multi-part assistant content: optional text + tool_use blocks
+      const content: Array<Record<string, unknown>> = [];
+      if (msg.content) content.push({ type: "text", text: msg.content });
+      for (const tc of msg.toolCalls) {
+        content.push({ type: "tool_use", id: tc.id, name: tc.name, input: tc.arguments });
+      }
+      result.push({ role: "assistant", content });
+      i++;
+    } else if (msg.role === "tool") {
+      // Collect all consecutive tool results into one user message
+      const toolResults: Array<Record<string, unknown>> = [];
+      while (i < messages.length && messages[i].role === "tool") {
+        const tr = messages[i];
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: tr.toolCallId ?? "",
+          content: tr.content,
+        });
+        i++;
+      }
+      result.push({ role: "user", content: toolResults });
+    } else {
+      result.push({ role: msg.role, content: msg.content });
+      i++;
+    }
+  }
+  return result;
+}
+
 export class AnthropicAdapter implements LlmProviderAdapter {
   readonly provider = "claude" as const;
 
@@ -119,18 +166,26 @@ export class AnthropicAdapter implements LlmProviderAdapter {
 
   async chat(apiKey: string, request: NormalizedChatRequest): Promise<NormalizedChatResponse> {
     try {
-      // Anthropic separates the system prompt from the messages array
       const systemMsg = request.messages.find((m) => m.role === "system");
       const convoMessages = request.messages.filter((m) => m.role !== "system");
 
       const body: Record<string, unknown> = {
         model: request.modelId,
         max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
-        messages: convoMessages.map((m) => ({ role: m.role, content: m.content })),
+        messages: toAnthropicMessages(convoMessages),
       };
 
       if (systemMsg) body.system = systemMsg.content;
       if (request.temperature !== undefined) body.temperature = request.temperature;
+
+      // Tool use — translate normalized ToolDefinition[] to Anthropic format
+      if (request.tools && request.tools.length > 0) {
+        body.tools = request.tools.map((t: ToolDefinition) => ({
+          name: t.name,
+          description: t.description,
+          input_schema: t.parameters,
+        }));
+      }
 
       const resp = (await apiFetch("/messages", apiKey, {
         method: "POST",
@@ -139,11 +194,48 @@ export class AnthropicAdapter implements LlmProviderAdapter {
         id: string;
         type: string;
         role: string;
-        content: Array<{ type: string; text?: string }>;
+        content: Array<{
+          type: string;
+          text?: string;
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+        }>;
         model: string;
         stop_reason: string | null;
         usage: { input_tokens: number; output_tokens: number };
       };
+
+      // Detect tool_use stop — return tool calls instead of text
+      if (resp.stop_reason === "tool_use") {
+        const toolCalls: ToolCall[] = resp.content
+          .filter((c) => c.type === "tool_use")
+          .map((c) => ({
+            id: c.id ?? `tool_${Date.now()}`,
+            name: c.name ?? "",
+            arguments: c.input ?? {},
+          }));
+
+        // Partial text before the tool call (Anthropic may include both)
+        const partialText = resp.content
+          .filter((c) => c.type === "text")
+          .map((c) => c.text ?? "")
+          .join("");
+
+        return {
+          provider: "claude",
+          modelId: request.modelId,
+          message: { role: "assistant", content: partialText },
+          usage: {
+            inputTokens: resp.usage.input_tokens,
+            outputTokens: resp.usage.output_tokens,
+            totalTokens: resp.usage.input_tokens + resp.usage.output_tokens,
+          },
+          finishReason: resp.stop_reason,
+          error: null,
+          toolCalls,
+        };
+      }
 
       const text = resp.content
         .filter((c) => c.type === "text")

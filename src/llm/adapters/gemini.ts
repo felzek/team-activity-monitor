@@ -13,10 +13,13 @@
 import { LlmError, normalizeProviderError } from "../errors.js";
 import type {
   LlmProviderAdapter,
+  NormalizedChatMessage,
   NormalizedChatRequest,
   NormalizedChatResponse,
   NormalizedModel,
   ProviderHealth,
+  ToolCall,
+  ToolDefinition,
 } from "../types.js";
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
@@ -94,6 +97,101 @@ async function apiFetch(path: string, apiKey: string, init?: RequestInit): Promi
   return body;
 }
 
+// ── Gemini tool-use helpers ───────────────────────────────────────────────────
+
+interface GeminiFunctionDeclaration {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+interface GeminiFunctionCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+interface GeminiFunctionResponse {
+  name: string;
+  response: Record<string, unknown>;
+}
+
+interface GeminiPart {
+  text?: string;
+  functionCall?: GeminiFunctionCall;
+  functionResponse?: GeminiFunctionResponse;
+}
+
+interface GeminiContent {
+  role: "user" | "model";
+  parts: GeminiPart[];
+}
+
+function toGeminiTools(tools: ToolDefinition[]): { functionDeclarations: GeminiFunctionDeclaration[] }[] {
+  return [{
+    functionDeclarations: tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters as Record<string, unknown>,
+    })),
+  }];
+}
+
+/**
+ * Translate normalized messages to Gemini contents array.
+ * - System messages are excluded (passed separately as systemInstruction).
+ * - Assistant messages with toolCalls become "model" parts with functionCall.
+ * - Tool-result messages (role: "tool") become "user" parts with functionResponse.
+ */
+function toGeminiContents(messages: NormalizedChatMessage[]): GeminiContent[] {
+  const contents: GeminiContent[] = [];
+
+  for (const msg of messages) {
+    if (msg.role === "system") continue;
+
+    if (msg.role === "assistant") {
+      if (msg.toolCalls && msg.toolCalls.length > 0) {
+        contents.push({
+          role: "model",
+          parts: msg.toolCalls.map((tc) => ({
+            functionCall: {
+              name: tc.name,
+              args: tc.arguments as Record<string, unknown>,
+            },
+          })),
+        });
+      } else {
+        contents.push({ role: "model", parts: [{ text: msg.content }] });
+      }
+    } else if (msg.role === "tool") {
+      // Gemini expects function responses as role: "user"
+      let responsePayload: Record<string, unknown>;
+      try {
+        const parsed: unknown = JSON.parse(msg.content);
+        responsePayload = typeof parsed === "object" && parsed !== null
+          ? (parsed as Record<string, unknown>)
+          : { result: parsed };
+      } catch {
+        responsePayload = { result: msg.content };
+      }
+      contents.push({
+        role: "user",
+        parts: [{
+          functionResponse: {
+            name: msg.toolName ?? "unknown_tool",
+            response: responsePayload,
+          },
+        }],
+      });
+    } else {
+      contents.push({ role: "user", parts: [{ text: msg.content }] });
+    }
+  }
+
+  return contents;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export class GeminiAdapter implements LlmProviderAdapter {
   readonly provider = "gemini" as const;
 
@@ -144,13 +242,7 @@ export class GeminiAdapter implements LlmProviderAdapter {
         : `models/${request.modelId}`;
 
       const systemMsg = request.messages.find((m) => m.role === "system");
-      const convoMessages = request.messages.filter((m) => m.role !== "system");
-
-      // Map internal roles: "assistant" → Gemini "model"
-      const contents = convoMessages.map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      }));
+      const contents = toGeminiContents(request.messages);
 
       const body: Record<string, unknown> = {
         contents,
@@ -164,12 +256,16 @@ export class GeminiAdapter implements LlmProviderAdapter {
         body.systemInstruction = { parts: [{ text: systemMsg.content }] };
       }
 
+      if (request.tools && request.tools.length > 0) {
+        body.tools = toGeminiTools(request.tools);
+      }
+
       const resp = (await apiFetch(`/${modelPath}:generateContent`, apiKey, {
         method: "POST",
         body: JSON.stringify(body),
       })) as {
         candidates: Array<{
-          content: { parts: Array<{ text?: string }>; role: string };
+          content: { parts: Array<GeminiPart>; role: string };
           finishReason: string;
         }>;
         usageMetadata?: {
@@ -180,24 +276,47 @@ export class GeminiAdapter implements LlmProviderAdapter {
       };
 
       const candidate = resp.candidates?.[0];
-      const text =
-        candidate?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-
+      const parts = candidate?.content?.parts ?? [];
       const usage = resp.usageMetadata ?? {
         promptTokenCount: 0,
         candidatesTokenCount: 0,
         totalTokenCount: 0,
       };
 
+      const normalizedUsage = {
+        inputTokens: usage.promptTokenCount,
+        outputTokens: usage.candidatesTokenCount,
+        totalTokens: usage.totalTokenCount,
+      };
+
+      // Check if the model wants to call tools (functionCall parts present)
+      const functionCallParts = parts.filter((p) => p.functionCall);
+      if (functionCallParts.length > 0) {
+        const toolCalls: ToolCall[] = functionCallParts.map((p, i) => ({
+          // Gemini doesn't provide call IDs; synthesize from name + index
+          id: `gemini-${i}-${p.functionCall!.name}`,
+          name: p.functionCall!.name,
+          arguments: p.functionCall!.args,
+        }));
+        return {
+          provider: "gemini",
+          modelId: request.modelId,
+          message: { role: "assistant", content: "" },
+          usage: normalizedUsage,
+          finishReason: "tool_calls",
+          error: null,
+          toolCalls,
+        };
+      }
+
+      // Regular text response
+      const text = parts.map((p) => p.text ?? "").join("");
+
       return {
         provider: "gemini",
         modelId: request.modelId,
         message: { role: "assistant", content: text },
-        usage: {
-          inputTokens: usage.promptTokenCount,
-          outputTokens: usage.candidatesTokenCount,
-          totalTokens: usage.totalTokenCount,
-        },
+        usage: normalizedUsage,
         finishReason: candidate?.finishReason?.toLowerCase() ?? null,
         error: null,
       };
