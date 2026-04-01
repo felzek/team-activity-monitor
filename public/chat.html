@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Chat — Team Activity Monitor</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    /* ── Layout ─────────────────────────────────────────────────────────── */
+    :root {
+      --chat-bg: #0f1117;
+      --sidebar-bg: #15171f;
+      --surface: #1c1f2e;
+      --surface-hover: #22263a;
+      --border: #2a2f45;
+      --text-primary: #e8eaf0;
+      --text-secondary: #8b90a8;
+      --text-muted: #555a78;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+      --jira-color: #0052cc;
+      --github-color: #6e40c9;
+      --cached-color: #f59e0b;
+      --live-color: #22c55e;
+      --user-bubble: #1e2035;
+      --assistant-bubble: #141726;
+      --tool-bg: #0d1117;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--chat-bg);
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .app-shell {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────────── */
+    .sidebar {
+      width: 240px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .sidebar-logo svg {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-nav {
+      padding: 8px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 8px 8px 4px;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 13px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-link:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .nav-link.active { background: var(--surface); color: var(--text-primary); font-weight: 500; }
+
+    .new-chat-btn {
+      margin: 8px;
+      padding: 10px 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+
+    .new-chat-btn:hover { background: var(--accent-hover); }
+
+    /* ── Main chat area ──────────────────────────────────────────────────── */
+    .chat-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    /* Top bar */
+    .chat-topbar {
+      height: 52px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      background: var(--chat-bg);
+    }
+
+    .topbar-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .model-selector {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .model-selector:focus { border-color: var(--accent); }
+
+    /* Messages area */
+    .messages-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 0;
+      scroll-behavior: smooth;
+    }
+
+    .messages-inner {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    .welcome-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      text-align: center;
+      gap: 12px;
+    }
+
+    .welcome-state h2 {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .welcome-state p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      max-width: 480px;
+    }
+
+    .suggestion-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    .suggestion-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: 20px;
+      padding: 7px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .suggestion-pill:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    /* Message bubbles */
+    .message {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .message-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .message-avatar.user { background: var(--accent); color: #fff; }
+    .message-avatar.assistant { background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border); }
+
+    .message-body {
+      padding: 14px 16px;
+      border-radius: 10px;
+      line-height: 1.65;
+    }
+
+    .message.user .message-body {
+      background: var(--user-bubble);
+      border: 1px solid var(--border);
+    }
+
+    .message.assistant .message-body {
+      background: var(--assistant-bubble);
+      border: 1px solid var(--border);
+    }
+
+    .message-body h3 { font-size: 13px; font-weight: 600; margin: 12px 0 4px; color: var(--text-primary); }
+    .message-body h3:first-child { margin-top: 0; }
+    .message-body ul { padding-left: 18px; }
+    .message-body li { margin-bottom: 3px; }
+    .message-body code {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+    }
+    .message-body a { color: var(--accent-hover); text-decoration: none; }
+    .message-body a:hover { text-decoration: underline; }
+
+    /* Tool calls panel */
+    .tool-calls-panel {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .tool-calls-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--tool-bg);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+      user-select: none;
+    }
+
+    .tool-calls-toggle:hover { color: var(--text-primary); }
+
+    .tool-calls-list {
+      background: var(--tool-bg);
+      display: none;
+    }
+
+    .tool-calls-list.open { display: block; }
+
+    .tool-call-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 12px;
+    }
+
+    .tool-call-item:last-child { border-bottom: none; }
+
+    .tool-call-name {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--accent-hover);
+      font-size: 12px;
+    }
+
+    .tool-call-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .tool-call-status.success { color: var(--success); }
+    .tool-call-status.error { color: var(--error); }
+
+    /* Source badges */
+    .source-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .source-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid transparent;
+    }
+
+    .source-badge.jira {
+      background: rgba(0,82,204,0.15);
+      border-color: rgba(0,82,204,0.3);
+      color: #4d94ff;
+    }
+
+    .source-badge.github {
+      background: rgba(110,64,201,0.15);
+      border-color: rgba(110,64,201,0.3);
+      color: #a78bfa;
+    }
+
+    .source-badge.cached {
+      background: rgba(245,158,11,0.1);
+      border-color: rgba(245,158,11,0.3);
+      color: var(--cached-color);
+    }
+
+    .source-badge.live {
+      background: rgba(34,197,94,0.1);
+      border-color: rgba(34,197,94,0.3);
+      color: var(--live-color);
+    }
+
+    .source-badge.error {
+      background: rgba(239,68,68,0.1);
+      border-color: rgba(239,68,68,0.3);
+      color: var(--error);
+    }
+
+    /* Streaming cursor */
+    .streaming-cursor::after {
+      content: '▋';
+      animation: blink 0.7s infinite;
+      color: var(--accent);
+    }
+
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* Thinking indicator */
+    .thinking-message .message-body {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .thinking-dots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .thinking-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: thinking 1.2s infinite;
+    }
+
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes thinking { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+
+    /* Input area */
+    .input-area {
+      border-top: 1px solid var(--border);
+      padding: 16px 20px;
+      background: var(--chat-bg);
+    }
+
+    .input-inner {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .input-box {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      transition: border-color 0.15s;
+    }
+
+    .input-box:focus-within { border-color: var(--accent); }
+
+    #chat-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: none;
+      min-height: 22px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    #chat-input::placeholder { color: var(--text-muted); }
+
+    .send-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    .send-btn:hover { background: var(--accent-hover); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .send-btn svg { width: 16px; height: 16px; fill: #fff; }
+
+    .input-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .partial-failure-banner {
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: var(--warning);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    /* Error state */
+    .error-message .message-body {
+      background: rgba(239,68,68,0.08);
+      border-color: rgba(239,68,68,0.3);
+      color: var(--error);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/app" class="sidebar-logo">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="#6366f1"/>
+            <path d="M8 22L13 12L18 18L21 14L24 22" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Team Monitor
+        </a>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Navigation</div>
+        <a href="/app" class="nav-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Workspace
+        </a>
+        <a href="/intelligence" class="nav-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Intelligence
+        </a>
+        <a href="/chat" class="nav-link active">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          AI Chat
+        </a>
+      </nav>
+      <div style="padding: 12px 8px; border-top: 1px solid var(--border);">
+        <button class="new-chat-btn" id="new-chat-btn" style="width: 100%;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          New chat
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="chat-main">
+      <!-- Top bar -->
+      <div class="chat-topbar">
+        <span class="topbar-title" id="chat-title">New conversation</span>
+        <select class="model-selector" id="model-selector">
+          <option value="">Loading models…</option>
+        </select>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages-area" id="messages-area">
+        <div class="messages-inner" id="messages-inner">
+          <div class="welcome-state" id="welcome-state">
+            <svg width="48" height="48" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M8 22L13 12L18 18L21 14L24 22" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <h2>Ask about your team</h2>
+            <p>I can answer questions about Jira issues, GitHub commits, and pull requests — all from live data.</p>
+            <div class="suggestion-pills" id="suggestion-pills">
+              <button class="suggestion-pill" data-q="What is Felzek working on this week?">What is Felzek working on?</button>
+              <button class="suggestion-pill" data-q="Show recent pull requests">Recent pull requests</button>
+              <button class="suggestion-pill" data-q="What Jira issues were updated today?">Jira updates today</button>
+              <button class="suggestion-pill" data-q="Summarize current work across the team">Team activity summary</button>
+              <button class="suggestion-pill" data-q="What repos has the team been active in?">Active repositories</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="input-area">
+        <div class="input-inner">
+          <div class="input-box">
+            <textarea
+              id="chat-input"
+              placeholder="Ask about Jira, GitHub, team activity…"
+              rows="1"
+              autofocus
+            ></textarea>
+            <button class="send-btn" id="send-btn" disabled>
+              <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+            </button>
+          </div>
+          <div class="input-footer">
+            <span id="status-text">Ready</span>
+            <span id="token-count"></span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/chat.js"></script>
+</body>
+</html>

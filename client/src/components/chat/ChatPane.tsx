@@ -1,10 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { MessageList, type DisplayMessage } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import {
+  ChatWelcomeState,
+  type ArtifactQuickAction,
+} from "./ChatWelcomeState";
 import { useChatTurn } from "@/hooks/useChatTurn";
 import { useModels } from "@/hooks/useModels";
 import { useChatStore } from "@/store/chatStore";
-import type { ChatMessage } from "@/api/types";
+import type { ChatMessage, ChatTurnResult } from "@/api/types";
 
 let nextId = 1;
 const uid = () => String(nextId++);
@@ -22,6 +26,8 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const [modelId, setModelId] = useState("");
   const [chatTitle, setChatTitle] = useState("New chat");
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<ArtifactQuickAction | null>(null);
+  const [focusToken, setFocusToken] = useState(0);
   const currentConvRef = useRef<string | null>(null);
 
   const { data: models } = useModels();
@@ -44,6 +50,8 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   useEffect(() => {
     if (seedText) {
       setInput(seedText);
+      setSelectedAction(null);
+      setFocusToken((token) => token + 1);
       onSeedConsumed?.();
     }
   }, [seedText, onSeedConsumed]);
@@ -57,6 +65,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
       setMessages([]);
       setHistory([]);
       setChatTitle("New chat");
+      setSelectedAction(null);
       return;
     }
 
@@ -85,6 +94,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
                 totalLatencyMs: (meta?.totalLatencyMs as number) ?? 0,
                 partialFailures: [],
                 sources: (meta?.sources as Array<{ source: string; freshness: "live" | "cached" }>) ?? [],
+                artifactSuggestions: (meta?.artifactSuggestions as ChatTurnResult["artifactSuggestions"]) ?? [],
               },
             });
             historyMsgs.push({ role: "assistant", content: m.content });
@@ -93,19 +103,44 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
 
         setMessages(displayMsgs);
         setHistory(historyMsgs);
+        setSelectedAction(null);
       })
       .catch(() => {
         setMessages([]);
         setHistory([]);
+        setSelectedAction(null);
       })
       .finally(() => setLoadingMessages(false));
   }, [conversationId, conversations, loadMessages]);
 
+  const handleInputChange = useCallback((value: string) => {
+    setInput(value);
+  }, []);
+
+  const handleActionSelect = useCallback((action: ArtifactQuickAction) => {
+    setSelectedAction(action);
+    setInput(action.prompt);
+    setFocusToken((token) => token + 1);
+  }, []);
+
+  const handleSuggestionSelect = useCallback((text: string) => {
+    setSelectedAction(null);
+    setInput(text);
+    setFocusToken((token) => token + 1);
+  }, []);
+
+  const handleClearIntent = useCallback(() => {
+    setSelectedAction(null);
+    setFocusToken((token) => token + 1);
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || chatTurn.isPending) return;
+    const pendingAction = selectedAction;
 
     setInput("");
+    setSelectedAction(null);
 
     // Auto-create conversation if none is active
     let activeId = conversationId;
@@ -132,7 +167,17 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     setMessages((prev) => [
       ...prev,
       { id: userMsgId, role: "user", content: text },
-      { id: thinkingId, role: "thinking" },
+      {
+        id: thinkingId,
+        role: "thinking",
+        status: pendingAction
+          ? {
+              kind: "artifact",
+              label: pendingAction.pendingTitle,
+              detail: pendingAction.pendingDescription,
+            }
+          : undefined,
+      },
     ]);
 
     const newHistory: ChatMessage[] = [...history, { role: "user", content: text }];
@@ -169,11 +214,13 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
         },
       }
     );
-  }, [input, chatTurn, history, modelId, messages.length, conversationId, updateConversation, createConversation, loadConversations]);
+  }, [input, chatTurn, history, modelId, messages.length, conversationId, updateConversation, createConversation, loadConversations, selectedAction]);
+
+  const showWelcomeState = !loadingMessages && messages.length === 0;
 
   return (
     <div className="chat-pane">
-      <div className="chat-pane-header">
+      <div className={`chat-pane-header${showWelcomeState ? " chat-pane-header--empty" : ""}`}>
         <span className="chat-pane-title">{chatTitle}</span>
       </div>
 
@@ -181,23 +228,39 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
         <div className="message-list" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span className="muted" style={{ fontSize: "0.82rem" }}>Loading messages...</span>
         </div>
+      ) : showWelcomeState ? (
+        <ChatWelcomeState
+          value={input}
+          onChange={handleInputChange}
+          onSubmit={sendMessage}
+          disabled={chatTurn.isPending || loadingMessages}
+          modelId={modelId}
+          onModelChange={setModelId}
+          selectedAction={selectedAction}
+          onActionSelect={handleActionSelect}
+          onSuggestionSelect={handleSuggestionSelect}
+          onClearIntent={handleClearIntent}
+          focusToken={focusToken}
+        />
       ) : (
         <MessageList
           messages={messages}
-          onSuggestion={(text) => {
-            setInput(text);
-          }}
         />
       )}
 
-      <ChatInput
-        value={input}
-        onChange={setInput}
-        onSubmit={sendMessage}
-        disabled={chatTurn.isPending || loadingMessages}
-        modelId={modelId}
-        onModelChange={setModelId}
-      />
+      {!showWelcomeState && (
+        <ChatInput
+          value={input}
+          onChange={handleInputChange}
+          onSubmit={sendMessage}
+          disabled={chatTurn.isPending || loadingMessages}
+          modelId={modelId}
+          onModelChange={setModelId}
+          intentLabel={selectedAction ? `Creating: ${selectedAction.label}` : null}
+          onClearIntent={handleClearIntent}
+          focusToken={focusToken}
+        />
+      )}
     </div>
   );
 }

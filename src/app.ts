@@ -56,6 +56,7 @@ import { LlmService } from "./llm/service.js";
 import { buildActivitySummary } from "./orchestrator/activity.js";
 import { resolveIdentity } from "./query/identity.js";
 import { parseQuery } from "./query/parser.js";
+import { createArtifactsRouter } from "./routes/artifacts.js";
 import { createConversationsRouter } from "./routes/conversations.js";
 import { createIntelligenceRouter } from "./routes/intelligence.js";
 import { createLlmRouter } from "./routes/llm.js";
@@ -387,6 +388,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
   // ── Sub-routers ────────────────────────────────────────────────────────────
   app.use("/api/llm", createLlmRouter(llmService, logger));
+  app.use("/api/v1/artifacts", createArtifactsRouter(config, database, logger));
   app.use(createIntelligenceRouter(config, database, logger));
   app.use(createConversationsRouter(database, logger));
 
@@ -1748,6 +1750,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
                 sources: result.sources,
                 tokenUsage: result.tokenUsage,
                 totalLatencyMs: result.totalLatencyMs,
+                artifactSuggestions: result.artifactSuggestions,
               },
             });
           }

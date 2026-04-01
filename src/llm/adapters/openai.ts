@@ -11,10 +11,12 @@
 import { LlmError, normalizeProviderError } from "../errors.js";
 import type {
   LlmProviderAdapter,
+  NormalizedChatMessage,
   NormalizedChatRequest,
   NormalizedChatResponse,
   NormalizedModel,
   ProviderHealth,
+  ToolCall,
 } from "../types.js";
 
 const BASE_URL = "https://api.openai.com/v1";
@@ -114,6 +116,37 @@ async function apiFetch(path: string, apiKey: string, init?: RequestInit): Promi
   return body;
 }
 
+/**
+ * Convert normalized messages to OpenAI Chat Completions format.
+ * Tool-result messages use role "tool" with tool_call_id.
+ * Assistant messages that made tool calls include tool_calls array.
+ */
+function toOpenAiMessages(
+  messages: NormalizedChatMessage[]
+): Array<Record<string, unknown>> {
+  return messages.map((msg) => {
+    if (msg.role === "tool") {
+      return {
+        role: "tool",
+        tool_call_id: msg.toolCallId ?? "",
+        content: msg.content,
+      };
+    }
+    if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+      return {
+        role: "assistant",
+        content: msg.content || null,
+        tool_calls: msg.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+        })),
+      };
+    }
+    return { role: msg.role, content: msg.content };
+  });
+}
+
 export class OpenAiAdapter implements LlmProviderAdapter {
   readonly provider = "openai" as const;
 
@@ -155,8 +188,107 @@ export class OpenAiAdapter implements LlmProviderAdapter {
   }
 
   async chat(apiKey: string, request: NormalizedChatRequest): Promise<NormalizedChatResponse> {
+    // Use Chat Completions API when tools are requested (standard tool use format);
+    // fall back to Responses API for plain chat (preserves existing behavior).
+    if (request.tools && request.tools.length > 0) {
+      return this.chatCompletionsWithTools(apiKey, request);
+    }
+    return this.responsesApiChat(apiKey, request);
+  }
+
+  /** Chat Completions API — used for tool-enabled requests. */
+  private async chatCompletionsWithTools(
+    apiKey: string,
+    request: NormalizedChatRequest
+  ): Promise<NormalizedChatResponse> {
     try {
-      // Responses API separates system prompt (instructions) from conversation input
+      const body: Record<string, unknown> = {
+        model: request.modelId,
+        messages: toOpenAiMessages(request.messages),
+        max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
+      };
+
+      if (request.temperature !== undefined) body.temperature = request.temperature;
+
+      if (request.tools && request.tools.length > 0) {
+        body.tools = request.tools.map((t) => ({
+          type: "function",
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+          },
+        }));
+      }
+
+      const resp = (await apiFetch("/chat/completions", apiKey, {
+        method: "POST",
+        body: JSON.stringify(body),
+      })) as {
+        choices: Array<{
+          message: {
+            role: string;
+            content: string | null;
+            tool_calls?: Array<{
+              id: string;
+              type: string;
+              function: { name: string; arguments: string };
+            }>;
+          };
+          finish_reason: string;
+        }>;
+        usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      };
+
+      const choice = resp.choices[0];
+      const usage = resp.usage ?? { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+      // Tool call response
+      if (choice.finish_reason === "tool_calls" && choice.message.tool_calls) {
+        const toolCalls: ToolCall[] = choice.message.tool_calls.map((tc) => ({
+          id: tc.id,
+          name: tc.function.name,
+          arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+        }));
+
+        return {
+          provider: "openai",
+          modelId: request.modelId,
+          message: { role: "assistant", content: choice.message.content ?? "" },
+          usage: {
+            inputTokens: usage.prompt_tokens,
+            outputTokens: usage.completion_tokens,
+            totalTokens: usage.total_tokens,
+          },
+          finishReason: choice.finish_reason,
+          error: null,
+          toolCalls,
+        };
+      }
+
+      return {
+        provider: "openai",
+        modelId: request.modelId,
+        message: { role: "assistant", content: choice.message.content ?? "" },
+        usage: {
+          inputTokens: usage.prompt_tokens,
+          outputTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens,
+        },
+        finishReason: choice.finish_reason,
+        error: null,
+      };
+    } catch (err) {
+      throw normalizeProviderError(err, "openai", "OpenAI chat completions failed");
+    }
+  }
+
+  /** Responses API — used for plain chat (no tools). Preserves existing behavior. */
+  private async responsesApiChat(
+    apiKey: string,
+    request: NormalizedChatRequest
+  ): Promise<NormalizedChatResponse> {
+    try {
       const systemMsg = request.messages.find((m) => m.role === "system");
       const convoMessages = request.messages.filter((m) => m.role !== "system");
 

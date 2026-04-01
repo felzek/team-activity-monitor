@@ -44,9 +44,46 @@ export interface NormalizedModel {
   sortOrder: number;
 }
 
+// ── Tool use types ────────────────────────────────────────────────────────────
+
+export interface ToolParameterSchema {
+  type: string;
+  description: string;
+  enum?: string[];
+  items?: { type: string };
+}
+
+/** Provider-agnostic tool definition (JSON Schema). */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, ToolParameterSchema>;
+    required: string[];
+  };
+}
+
+/** A single tool call the LLM wants to execute. */
+export interface ToolCall {
+  /** Provider-assigned call ID — must be echoed back in the tool result. */
+  id: string;
+  name: string;
+  /** Parsed from JSON. */
+  arguments: Record<string, unknown>;
+}
+
+// ── Chat message types ────────────────────────────────────────────────────────
+
 export interface NormalizedChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** On assistant messages that contained tool calls. */
+  toolCalls?: ToolCall[];
+  /** On tool-result messages: the ID of the tool call being answered. */
+  toolCallId?: string;
+  /** On tool-result messages: the tool name. */
+  toolName?: string;
 }
 
 export interface NormalizedChatRequest {
@@ -61,6 +98,8 @@ export interface NormalizedChatRequest {
   temperature?: number;
   maxOutputTokens?: number;
   metadata?: Record<string, unknown>;
+  /** When present, the adapter enables tool use. */
+  tools?: ToolDefinition[];
 }
 
 export interface NormalizedChatResponse {
@@ -71,6 +110,12 @@ export interface NormalizedChatResponse {
   usage: { inputTokens: number; outputTokens: number; totalTokens: number };
   finishReason: string | null;
   error: null;
+  /**
+   * Present when the model wants to call one or more tools instead of
+   * returning a final text response. The caller should execute the tools,
+   * append results to the message history, and call again.
+   */
+  toolCalls?: ToolCall[];
 }
 
 export interface ProviderHealth {

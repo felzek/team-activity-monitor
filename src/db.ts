@@ -7,6 +7,7 @@ import type { SessionData, Store } from "express-session";
 import session from "express-session";
 
 import type { AppConfig } from "./config.js";
+import type { ArtifactKind, ArtifactRecord, ArtifactSpec, ArtifactStatus } from "./lib/artifacts/types.js";
 import type { ActivitySummary, TeamMember, TrackedRepo } from "./types/activity.js";
 import { decrypt, encrypt, maskApiKey } from "./lib/encryption.js";
 import type {
@@ -98,6 +99,26 @@ interface BackgroundJobRow {
   job_type: string;
   status: string;
   payload_json: string;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ArtifactRow {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  conversation_id: string | null;
+  message_id: string | null;
+  kind: string;
+  status: string;
+  title: string;
+  drive_file_id: string | null;
+  web_view_link: string | null;
+  mime_type: string | null;
+  drive_folder_id: string | null;
+  source_artifact_id: string | null;
+  spec_json: string;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -1275,16 +1296,6 @@ export class AppDatabase {
         input.createdByUserId
       );
 
-    this.createBackgroundJob({
-      organizationId: input.organizationId,
-      jobType: "invite_delivery",
-      payload: {
-        email: input.email.toLowerCase(),
-        role: input.role,
-        token
-      }
-    });
-
     return toInvitationEntry(
       {
         id,
@@ -1557,6 +1568,53 @@ export class AppDatabase {
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }));
+  }
+
+  claimPendingJob(): {
+    id: string;
+    organizationId: string;
+    jobType: string;
+    payload: Record<string, unknown>;
+  } | null {
+    const now = new Date().toISOString();
+    const row = this.connection
+      .prepare(
+        `UPDATE background_jobs
+         SET status = 'processing', updated_at = ?
+         WHERE id = (
+           SELECT id FROM background_jobs
+           WHERE status = 'queued'
+           ORDER BY created_at ASC
+           LIMIT 1
+         )
+         RETURNING id, organization_id, job_type, payload_json`
+      )
+      .get(now) as
+      | { id: string; organization_id: string; job_type: string; payload_json: string }
+      | undefined;
+
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      jobType: row.job_type,
+      payload: parseJson<Record<string, unknown>>(row.payload_json, {})
+    };
+  }
+
+  updateBackgroundJob(
+    id: string,
+    update: { status: string; errorMessage?: string | null }
+  ) {
+    const now = new Date().toISOString();
+    this.connection
+      .prepare(
+        `UPDATE background_jobs
+         SET status = ?, error_message = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(update.status, update.errorMessage ?? null, now, id);
   }
 
   // ── Conversations ──────────────────────────────────────────────────────
@@ -1935,6 +1993,181 @@ export class AppDatabase {
     };
   }
 
+  // ── Artifacts ──────────────────────────────────────────────────────────
+
+  createArtifact(input: {
+    organizationId: string;
+    userId: string;
+    conversationId?: string;
+    messageId?: string;
+    kind: ArtifactKind;
+    title: string;
+    spec: ArtifactSpec;
+    driveFolderId?: string;
+    sourceArtifactId?: string;
+  }): ArtifactRecord {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+
+    this.connection
+      .prepare(
+        `INSERT INTO artifacts (
+          id, organization_id, user_id, conversation_id, message_id,
+          kind, status, title, drive_file_id, web_view_link,
+          mime_type, drive_folder_id, source_artifact_id, spec_json,
+          error_message, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.organizationId,
+        input.userId,
+        input.conversationId ?? null,
+        input.messageId ?? null,
+        input.kind,
+        "creating",
+        input.title,
+        null,
+        null,
+        null,
+        input.driveFolderId ?? null,
+        input.sourceArtifactId ?? null,
+        JSON.stringify(input.spec),
+        null,
+        now,
+        now
+      );
+
+    return this.mapArtifactRow(
+      this.connection
+        .prepare("SELECT * FROM artifacts WHERE id = ?")
+        .get(id) as ArtifactRow
+    );
+  }
+
+  updateArtifactStatus(
+    artifactId: string,
+    status: ArtifactStatus,
+    updates?: {
+      driveFileId?: string;
+      webViewLink?: string;
+      mimeType?: string;
+      errorMessage?: string;
+    }
+  ): ArtifactRecord | null {
+    const now = new Date().toISOString();
+    this.connection
+      .prepare(
+        `UPDATE artifacts SET
+          status = ?,
+          drive_file_id = COALESCE(?, drive_file_id),
+          web_view_link = COALESCE(?, web_view_link),
+          mime_type = COALESCE(?, mime_type),
+          error_message = ?,
+          updated_at = ?
+        WHERE id = ?`
+      )
+      .run(
+        status,
+        updates?.driveFileId ?? null,
+        updates?.webViewLink ?? null,
+        updates?.mimeType ?? null,
+        updates?.errorMessage ?? null,
+        now,
+        artifactId
+      );
+
+    const row = this.connection
+      .prepare("SELECT * FROM artifacts WHERE id = ?")
+      .get(artifactId) as ArtifactRow | undefined;
+
+    return row ? this.mapArtifactRow(row) : null;
+  }
+
+  getArtifact(artifactId: string, userId: string): ArtifactRecord | null {
+    const row = this.connection
+      .prepare("SELECT * FROM artifacts WHERE id = ? AND user_id = ?")
+      .get(artifactId, userId) as ArtifactRow | undefined;
+    return row ? this.mapArtifactRow(row) : null;
+  }
+
+  getArtifactById(artifactId: string): ArtifactRecord | null {
+    const row = this.connection
+      .prepare("SELECT * FROM artifacts WHERE id = ?")
+      .get(artifactId) as ArtifactRow | undefined;
+    return row ? this.mapArtifactRow(row) : null;
+  }
+
+  listArtifacts(input: {
+    userId: string;
+    organizationId: string;
+    conversationId?: string;
+    limit?: number;
+    offset?: number;
+  }): { artifacts: ArtifactRecord[]; total: number } {
+    const conditions = ["user_id = ?", "organization_id = ?"];
+    const params: unknown[] = [input.userId, input.organizationId];
+
+    if (input.conversationId) {
+      conditions.push("conversation_id = ?");
+      params.push(input.conversationId);
+    }
+
+    const where = conditions.join(" AND ");
+
+    const total = (
+      this.connection
+        .prepare(`SELECT COUNT(*) as count FROM artifacts WHERE ${where}`)
+        .get(...params) as { count: number }
+    ).count;
+
+    const limit = input.limit ?? 50;
+    const offset = input.offset ?? 0;
+
+    const rows = this.connection
+      .prepare(
+        `SELECT * FROM artifacts WHERE ${where}
+         ORDER BY created_at DESC LIMIT ? OFFSET ?`
+      )
+      .all(...params, limit, offset) as ArtifactRow[];
+
+    return {
+      artifacts: rows.map((r) => this.mapArtifactRow(r)),
+      total
+    };
+  }
+
+  listConversationArtifacts(conversationId: string): ArtifactRecord[] {
+    const rows = this.connection
+      .prepare(
+        "SELECT * FROM artifacts WHERE conversation_id = ? ORDER BY created_at ASC"
+      )
+      .all(conversationId) as ArtifactRow[];
+    return rows.map((r) => this.mapArtifactRow(r));
+  }
+
+  private mapArtifactRow(row: ArtifactRow): ArtifactRecord {
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      userId: row.user_id,
+      conversationId: row.conversation_id,
+      messageId: row.message_id,
+      kind: row.kind as ArtifactKind,
+      status: row.status as ArtifactStatus,
+      title: row.title,
+      driveFileId: row.drive_file_id,
+      webViewLink: row.web_view_link,
+      mimeType: row.mime_type,
+      driveFolderId: row.drive_folder_id,
+      sourceArtifactId: row.source_artifact_id,
+      spec: parseJson<ArtifactSpec>(row.spec_json, { type: "doc", content: "" }),
+      errorMessage: row.error_message,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
   close(): void {
     this.connection.close();
   }
@@ -2195,6 +2428,43 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
 
     CREATE INDEX IF NOT EXISTS idx_messages_conversation
       ON messages(conversation_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS artifacts (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      conversation_id TEXT,
+      message_id TEXT,
+      kind TEXT NOT NULL CHECK (kind IN (
+        'google_doc', 'google_sheet', 'google_slides',
+        'chart', 'xlsx_export', 'pptx_export', 'pdf_export'
+      )),
+      status TEXT NOT NULL CHECK (status IN ('creating', 'ready', 'failed')),
+      title TEXT NOT NULL,
+      drive_file_id TEXT,
+      web_view_link TEXT,
+      mime_type TEXT,
+      drive_folder_id TEXT,
+      source_artifact_id TEXT,
+      spec_json TEXT NOT NULL,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL,
+      FOREIGN KEY (source_artifact_id) REFERENCES artifacts(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_artifacts_user_org
+      ON artifacts(user_id, organization_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_artifacts_conversation
+      ON artifacts(conversation_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_artifacts_drive_file
+      ON artifacts(drive_file_id)
+      WHERE drive_file_id IS NOT NULL;
   `);
 
   const needsProviderMigration = (() => {

@@ -44,7 +44,7 @@ export class LlmProviderRegistry {
     const provider = modelId.slice(0, colonIndex) as LlmProvider;
     const providerModelId = modelId.slice(colonIndex + 1);
 
-    const validProviders: LlmProvider[] = ["openai", "claude", "gemini"];
+    const validProviders: LlmProvider[] = ["openai", "claude", "gemini", "local"];
     if (!validProviders.includes(provider)) {
       throw new LlmError(
         `Unknown provider "${provider}". Valid providers: ${validProviders.join(", ")}.`,
