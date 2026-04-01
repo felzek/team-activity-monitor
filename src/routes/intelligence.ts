@@ -7,7 +7,7 @@
  *
  * GET /api/v1/orgs/:orgId/intelligence/board
  *   Full payload: everything in overview + raw GitHubDashboardData + JiraDashboardData.
- *   Used by intelligence.html in place of its two separate dashboard fetches.
+ *   Used by the React intelligence board in place of two separate dashboard fetches.
  *
  * Both accept optional query params:
  *   ?person=alice   (informational; filters not yet applied server-side)
@@ -300,7 +300,7 @@ export function createIntelligenceRouter(
 
   /**
    * GET /api/v1/orgs/:orgId/intelligence/board
-   * Full payload — intelligence.html board.
+   * Full payload — intelligence board.
    */
   router.get(
     "/api/v1/orgs/:orgId/intelligence/board",
