@@ -11,7 +11,7 @@ const PROVIDERS = [
 type ProviderId = typeof PROVIDERS[number]["id"];
 
 interface LlmKeysResponse {
-  keys: Array<{ provider: string; savedAt: string }>;
+  items: Array<{ provider: string; savedAt: string }>;
 }
 
 export function LlmProviders() {
@@ -22,7 +22,7 @@ export function LlmProviders() {
     staleTime: 30_000,
   });
 
-  const savedProviders = new Set(data?.keys?.map((k) => k.provider) ?? []);
+  const savedProviders = new Set(data?.items?.map((k) => k.provider) ?? []);
 
   return (
     <div className="settings-group">
@@ -58,7 +58,7 @@ function ProviderCard({ provider, hasSavedKey, onSaved, onRemoved }: ProviderCar
     mutationFn: (key: string) =>
       apiFetch(`/api/v1/auth/llm-keys/${provider.id}`, {
         method: "PUT",
-        body: JSON.stringify({ key }),
+        body: JSON.stringify({ apiKey: key }),
       }),
     onSuccess: () => { setStatus("Key saved."); setKeyInput(""); onSaved(); },
     onError: (e: Error) => setStatus(`Error: ${e.message}`),
