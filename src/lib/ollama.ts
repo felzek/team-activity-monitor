@@ -1,32 +1,17 @@
 /**
- * Dashboard insight generation using Ollama.
+ * Dashboard insight generation using the app's configured system model.
  *
- * This module is intentionally scoped to the dashboard one-sentence insight.
- * For grounded query responses, use src/lib/llm-pipeline.ts (which routes
- * through LlmService and supports all providers, including local Ollama).
+ * This path stays server-managed on purpose: Vercel AI Gateway is preferred
+ * for hosted deployments, while local Ollama remains the default fallback
+ * for local development.
  */
 
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
+import { generateSystemText } from "./llm-pipeline.js";
 import { toErrorMessage } from "./errors.js";
 import type { GitHubDashboardData, JiraDashboardData } from "../types/dashboard.js";
-
-interface OllamaChatResponse {
-  message?: {
-    role?: string;
-    content?: string;
-  };
-  error?: string;
-  total_duration?: number;
-  load_duration?: number;
-  prompt_eval_count?: number;
-  eval_count?: number;
-}
-
-function ollamaUrl(baseUrl: string, endpoint: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}/${endpoint.replace(/^\/+/, "")}`;
-}
 
 function buildDashboardInsightPrompt(
   github: GitHubDashboardData | null,
@@ -68,42 +53,14 @@ export async function generateDashboardInsight(
   logger: Logger
 ): Promise<string | null> {
   try {
-    const response = await fetch(ollamaUrl(config.ollamaBaseUrl, "chat"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: config.ollamaModel,
-        stream: false,
-        keep_alive: config.ollamaKeepAlive,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a concise team activity assistant. Output only the requested single sentence. No preamble, no follow-up."
-          },
-          {
-            role: "user",
-            content: buildDashboardInsightPrompt(github, jira)
-          }
-        ]
-      })
-    });
-
-    const payload = (await response.json().catch(() => ({}))) as OllamaChatResponse;
-
-    if (!response.ok) {
-      logger.warn(
-        { statusCode: response.status },
-        "Dashboard insight request returned non-OK status"
-      );
-      return null;
-    }
-
-    const content = payload.message?.content?.trim();
-    return content || null;
+    return await generateSystemText(
+      config,
+      "You are a concise team activity assistant. Output only the requested single sentence. No preamble, no follow-up.",
+      buildDashboardInsightPrompt(github, jira),
+      logger
+    );
   } catch (error) {
     logger.warn({ error: toErrorMessage(error) }, "Dashboard insight generation failed");
     return null;
   }
 }
-

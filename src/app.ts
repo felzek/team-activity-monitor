@@ -48,6 +48,7 @@ import {
 } from "./lib/provider-auth.js";
 import { createRateLimitMiddleware } from "./lib/rate-limit.js";
 import { AnthropicAdapter } from "./llm/adapters/anthropic.js";
+import { GatewayAdapter } from "./llm/adapters/gateway.js";
 import { GeminiAdapter } from "./llm/adapters/gemini.js";
 import { OllamaAdapter } from "./llm/adapters/ollama.js";
 import { OpenAiAdapter } from "./llm/adapters/openai.js";
@@ -60,6 +61,7 @@ import { createArtifactsRouter } from "./routes/artifacts.js";
 import { createConversationsRouter } from "./routes/conversations.js";
 import { createIntelligenceRouter } from "./routes/intelligence.js";
 import { createLlmRouter } from "./routes/llm.js";
+import { validateConnectorConnection } from "./lib/job-worker.js";
 import type { LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
 
@@ -351,6 +353,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   // Build the LLM service once so it's accessible to all routes (query + /api/llm/*)
   // OllamaAdapter is always registered — it returns empty list gracefully when not running.
   const llmRegistry = new LlmProviderRegistry()
+    .register(new GatewayAdapter(config))
     .register(new AnthropicAdapter())
     .register(new OpenAiAdapter())
     .register(new GeminiAdapter())
@@ -371,7 +374,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       cookie: {
         httpOnly: true,
         sameSite: "lax",
-        secure: config.appEnv === "production",
+        secure: config.secureCookies,
         maxAge: 1000 * 60 * 60 * 24 * 7
       }
     })
@@ -1219,7 +1222,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     "/api/v1/orgs/:orgId/integrations/jira",
     requireAuth,
     requireOrganization(database, ["owner", "admin"]),
-    (request, response) => {
+    async (request, response) => {
       const organizationId = routeOrganizationId(request)!;
       const input = validateConnectorInput(request.body ?? {});
       const connector = database.updateJiraConnection(organizationId, {
@@ -1230,29 +1233,49 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         lastError: input.enabled || !input.secretRef ? null : "Connector disabled."
       });
 
-      database.createBackgroundJob({
-        organizationId,
-        jobType: "connector_validation",
-        payload: {
-          provider: "jira",
-          secretRef: connector.secretRef
+      if (config.backgroundWorkerEnabled) {
+        database.createBackgroundJob({
+          organizationId,
+          jobType: "connector_validation",
+          payload: {
+            provider: "jira",
+            secretRef: connector.secretRef
+          }
+        });
+      } else {
+        try {
+          await validateConnectorConnection(
+            config,
+            database,
+            logger,
+            organizationId,
+            "jira",
+            connector.secretRef ?? undefined
+          );
+        } catch {
+          // Inline validation already persisted the failure state to the connector record.
         }
-      });
+      }
+
+      const resolvedConnector =
+        config.backgroundWorkerEnabled
+          ? connector
+          : database.getJiraConnection(organizationId);
 
       database.recordAuditEvent({
         organizationId,
         actorUserId: request.session.userId!,
         eventType: "connector.updated",
         targetType: "jira_connection",
-        targetId: connector.id,
+        targetId: resolvedConnector.id,
         metadata: {
-          enabled: connector.enabled,
-          status: connector.status
+          enabled: resolvedConnector.enabled,
+          status: resolvedConnector.status
         }
       });
 
       response.json({
-        connector
+        connector: resolvedConnector
       });
     }
   );
@@ -1261,7 +1284,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     "/api/v1/orgs/:orgId/integrations/github",
     requireAuth,
     requireOrganization(database, ["owner", "admin"]),
-    (request, response) => {
+    async (request, response) => {
       const organizationId = routeOrganizationId(request)!;
       const input = validateConnectorInput(request.body ?? {});
       const connector = database.updateGitHubConnection(organizationId, {
@@ -1272,29 +1295,49 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         lastError: input.enabled || !input.secretRef ? null : "Connector disabled."
       });
 
-      database.createBackgroundJob({
-        organizationId,
-        jobType: "connector_validation",
-        payload: {
-          provider: "github",
-          secretRef: connector.secretRef
+      if (config.backgroundWorkerEnabled) {
+        database.createBackgroundJob({
+          organizationId,
+          jobType: "connector_validation",
+          payload: {
+            provider: "github",
+            secretRef: connector.secretRef
+          }
+        });
+      } else {
+        try {
+          await validateConnectorConnection(
+            config,
+            database,
+            logger,
+            organizationId,
+            "github",
+            connector.secretRef ?? undefined
+          );
+        } catch {
+          // Inline validation already persisted the failure state to the connector record.
         }
-      });
+      }
+
+      const resolvedConnector =
+        config.backgroundWorkerEnabled
+          ? connector
+          : database.getGitHubConnection(organizationId);
 
       database.recordAuditEvent({
         organizationId,
         actorUserId: request.session.userId!,
         eventType: "connector.updated",
         targetType: "github_connection",
-        targetId: connector.id,
+        targetId: resolvedConnector.id,
         metadata: {
-          enabled: connector.enabled,
-          status: connector.status
+          enabled: resolvedConnector.enabled,
+          status: resolvedConnector.status
         }
       });
 
       response.json({
-        connector
+        connector: resolvedConnector
       });
     }
   );
@@ -1512,12 +1555,12 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       }
 
       // Route to the provider determined by the model ID prefix.
-      // All model IDs ("local:*", "openai:*", "claude:*", "gemini:*") are handled by
+      // All model IDs ("gateway:*", "local:*", "openai:*", "claude:*", "gemini:*") are handled by
       // LlmService → LlmProviderRegistry → adapter. No silent Ollama fallback.
       const requestedModelId =
         typeof request.body?.modelId === "string" ? request.body.modelId.trim() : "";
-      // When no model is explicitly selected, default to the configured local model.
-      const effectiveModelId = requestedModelId || `local:${executionConfig.ollamaModel}`;
+      // When no model is explicitly selected, use the configured default system model.
+      const effectiveModelId = requestedModelId || executionConfig.defaultModelId;
 
       const chatResp = await llmService.chat(request.session.userId!, {
         modelId: effectiveModelId,

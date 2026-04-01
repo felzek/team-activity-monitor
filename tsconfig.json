@@ -16,6 +16,7 @@
     ]
   },
   "include": [
+    "app.ts",
     "src/**/*.ts",
     "src/**/*.d.ts",
     "scripts/**/*.ts"

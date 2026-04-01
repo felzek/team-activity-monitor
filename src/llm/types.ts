@@ -25,10 +25,10 @@ export type ProviderHealthStatus =
   | "not_configured";
 
 export interface NormalizedModel {
-  /** Namespaced: "openai:gpt-4o", "claude:claude-opus-4-6", "gemini:models/gemini-2.0-flash-001" */
+  /** Namespaced: "gateway:alibaba/qwen3.5-flash", "openai:gpt-5.4", "claude:claude-sonnet-4-6" */
   id: string;
   provider: LlmProvider;
-  /** Raw provider model ID: "gpt-4o", "claude-opus-4-6", "models/gemini-2.0-flash-001" */
+  /** Raw provider model ID: "alibaba/qwen3.5-flash", "gpt-5.4", "claude-sonnet-4-6" */
   providerModelId: string;
   displayName: string;
   supportsChat: boolean;
@@ -88,8 +88,8 @@ export interface NormalizedChatMessage {
 
 export interface NormalizedChatRequest {
   /**
-   * When coming from the client: namespaced "openai:gpt-4o".
-   * When coming from the service to an adapter: raw provider ID "gpt-4o".
+   * When coming from the client: namespaced "gateway:alibaba/qwen3.5-flash".
+   * When coming from the service to an adapter: raw provider ID "alibaba/qwen3.5-flash".
    */
   modelId: string;
   messages: NormalizedChatMessage[];

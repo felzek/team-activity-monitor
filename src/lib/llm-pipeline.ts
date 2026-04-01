@@ -1,6 +1,8 @@
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
+import { LlmProviderRegistry } from "../llm/registry.js";
+import { gatewayFetch } from "../llm/gateway-client.js";
 import { AppError, toErrorMessage } from "./errors.js";
 import type { ActivitySummary } from "../types/activity.js";
 
@@ -52,6 +54,8 @@ export interface OllamaCompatibleChatResponse {
 }
 
 const LOCAL_LLM_CHAT_PATH = "chat";
+const GATEWAY_CHAT_PATH = "/chat/completions";
+const DEFAULT_MAX_OUTPUT_TOKENS = 2048;
 
 function joinLocalLlmUrl(baseUrl: string, pathSegment: string): string {
   const base = baseUrl.replace(/\/+$/, "");
@@ -194,9 +198,113 @@ export async function postOllamaCompatibleChat(
   }
 }
 
+async function postGatewayChat(
+  config: AppConfig,
+  modelName: string,
+  messages: LocalLlmChatMessage[],
+  logger: Logger
+): Promise<string> {
+  try {
+    const response = (await gatewayFetch(config, GATEWAY_CHAT_PATH, {
+      method: "POST",
+      body: JSON.stringify({
+        model: modelName,
+        messages,
+        max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
+        temperature: 0.1
+      })
+    })) as {
+      choices?: Array<{
+        message?: {
+          content?: string | null;
+        };
+      }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
+    };
+
+    const content = response.choices?.[0]?.message?.content?.trim();
+    if (!content) {
+      throw new AppError("Vercel AI Gateway returned an empty response.", {
+        code: "AI_GATEWAY_EMPTY_RESPONSE",
+        statusCode: 503
+      });
+    }
+
+    logger.info(
+      {
+        gatewayModel: modelName,
+        gatewayBaseUrl: config.aiGatewayBaseUrl,
+        promptTokens: response.usage?.prompt_tokens,
+        completionTokens: response.usage?.completion_tokens,
+        totalTokens: response.usage?.total_tokens
+      },
+      "Generated response via Vercel AI Gateway"
+    );
+
+    return content;
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    logger.warn(
+      {
+        error: toErrorMessage(error),
+        gatewayBaseUrl: config.aiGatewayBaseUrl,
+        gatewayModel: modelName
+      },
+      "Vercel AI Gateway request failed"
+    );
+
+    throw new AppError(
+      "The configured Vercel AI Gateway model is unavailable. Check AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN, confirm the model slug is enabled, or switch DEFAULT_MODEL_ID to a local model.",
+      {
+        code: "AI_GATEWAY_UNAVAILABLE",
+        statusCode: 503,
+        cause: error
+      }
+    );
+  }
+}
+
+export async function generateSystemText(
+  config: AppConfig,
+  systemPrompt: string,
+  userPrompt: string,
+  logger: Logger,
+  modelOverride?: string
+): Promise<string> {
+  const modelId = modelOverride ?? config.defaultModelId;
+  const { provider, providerModelId } = LlmProviderRegistry.parseModelId(modelId);
+  const messages: LocalLlmChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt }
+  ];
+
+  if (provider === "local") {
+    return postOllamaCompatibleChat(config, providerModelId, messages, logger);
+  }
+
+  if (provider === "gateway") {
+    return postGatewayChat(config, providerModelId, messages, logger);
+  }
+
+  throw new AppError(
+    `DEFAULT_MODEL_ID must use a server-managed model (gateway:* or local:*). Received "${modelId}".`,
+    {
+      code: "INVALID_DEFAULT_MODEL",
+      statusCode: 500
+    }
+  );
+}
+
 /**
- * Run the grounded activity summary through the configured **local** LLM.
- * Uses an Ollama-compatible HTTP chat API (`POST {base}/chat`); env still names this `OLLAMA_*` for compatibility.
+ * Run the grounded activity summary through the configured default system model.
+ * Vercel deployments should typically use `gateway:*`; local development can keep `local:*`.
  */
 export async function generateGroundedResponse(
   config: AppConfig,
@@ -204,10 +312,11 @@ export async function generateGroundedResponse(
   logger: Logger,
   modelOverride?: string
 ): Promise<string> {
-  const modelName = modelOverride ?? config.ollamaModel;
-  const messages: LocalLlmChatMessage[] = [
-    { role: "system", content: RESPONSE_SYSTEM_PROMPT },
-    { role: "user", content: buildGroundedResponsePrompt(summary) }
-  ];
-  return postOllamaCompatibleChat(config, modelName, messages, logger);
+  return generateSystemText(
+    config,
+    RESPONSE_SYSTEM_PROMPT,
+    buildGroundedResponsePrompt(summary),
+    logger,
+    modelOverride
+  );
 }

@@ -74,14 +74,14 @@ flowchart LR
   Git --> Repo[Private GitHub repo]
   Repo --> CI[GitHub Actions CI]
   CI --> Build[Build / test / security scans]
-  Build --> Render[Render free web service]
+  Build --> Vercel[Vercel Express deployment]
   Build --> AWS[AWS scaffold for future production]
 
   CI -->|pull request checks| Review[PR review]
   Review --> Merge[Merge to main]
-  Merge --> Render
+  Merge --> Vercel
 
-  Render --> URL[Public demo URL]
+  Vercel --> URL[Public preview / production URL]
 
   AWS --> Staging[Future staging/prod path]
   Staging --> ECS[ECS / RDS / Redis / SQS / Secrets Manager]
@@ -89,7 +89,7 @@ flowchart LR
 
 ### Delivery notes
 
-- The current free-hosting path is Render because it gives the fastest way to get a public URL from the private repo.
+- The current hosted path is Vercel because it gives the app a clean Express deployment target plus preview environments and AI Gateway integration.
 - GitHub Actions is the primary automation layer for build, test, security, and deployment checks.
 - The AWS lane is scaffolded so the app can graduate to ECS, RDS, Redis, and SQS without redesigning the product flow.
 

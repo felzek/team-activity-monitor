@@ -67,7 +67,7 @@ function buildSummary(): ActivitySummary {
   };
 }
 
-describe("local HTTP LLM (Ollama-compatible chat API)", () => {
+describe("system LLM responses", () => {
   it("POSTs /chat and returns the assistant message", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -113,6 +113,64 @@ describe("local HTTP LLM (Ollama-compatible chat API)", () => {
     expect(chatPayload.model).toBe("qwen2.5:7b");
     expect(chatPayload.messages[0]?.role).toBe("system");
     expect(chatPayload.messages[1]?.content).toContain("\"displayName\": \"John Doe\"");
+
+    fetchMock.mockRestore();
+  });
+
+  it("routes grounded responses through Vercel AI Gateway when configured", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: "Overview:\nJohn Doe is active through Gateway."
+                }
+              }
+            ],
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 8,
+              total_tokens: 20
+            }
+          }),
+          { status: 200 }
+        )
+      );
+
+    const config = loadAppConfig({
+      PORT: "3001",
+      APP_TIMEZONE: "America/New_York",
+      USE_RECORDED_FIXTURES: "true",
+      TEAM_MEMBERS_CONFIG: "config/team-members.json",
+      TRACKED_REPOS_CONFIG: "config/repos.json",
+      FIXTURE_DIR: "fixtures/demo",
+      DATABASE_PATH: "data/test.db",
+      SESSION_SECRET: "test-session-secret",
+      AI_GATEWAY_API_KEY: "agw_test_123",
+      AI_GATEWAY_DEFAULT_MODEL: "alibaba/qwen3.5-flash"
+    });
+
+    const response = await generateGroundedResponse(
+      config,
+      buildSummary(),
+      logger.child({ test: "gateway" })
+    );
+
+    expect(response).toContain("Gateway");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://ai-gateway.vercel.sh/v1/chat/completions");
+
+    const gatewayPayload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      model: string;
+      messages: Array<{ role: string; content: string }>;
+    };
+
+    expect(gatewayPayload.model).toBe("alibaba/qwen3.5-flash");
+    expect(gatewayPayload.messages[0]?.role).toBe("system");
+    expect(gatewayPayload.messages[1]?.content).toContain("\"displayName\": \"John Doe\"");
 
     fetchMock.mockRestore();
   });

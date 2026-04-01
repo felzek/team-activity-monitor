@@ -1,279 +1,315 @@
 # Team Activity Monitor
 
-A multi-tenant SaaS that answers natural-language questions about your team's engineering activity by pulling real data from Jira and GitHub and generating grounded answers with an LLM.
+Team Activity Monitor is a multi-tenant Express + TypeScript application that answers natural-language questions about engineering activity by combining Jira, GitHub, and LLM-generated summaries.
 
-> "What is John working on this week?"
-> "Show me Sarah's open pull requests"
-> "What has Mike committed in the last 14 days?"
+The repository is now Vercel-first:
+- Vercel deploys the Express app from [`app.ts`](./app.ts)
+- the build command is `npm run build`
+- Vercel AI Gateway is the default hosted model path when it is configured
+- local Ollama remains the default fallback for local development
 
----
+## Runtime Overview
 
-## How it works
+- Runtime: Node.js 22
+- Backend: Express 5 + TypeScript (strict, ES modules)
+- Frontend: React + Vite, built into `public/app/`
+- Database: SQLite via `better-sqlite3`
+- Sessions: SQLite-backed `express-session`
+- Hosted AI default: Vercel AI Gateway
+- Local AI fallback: Ollama
 
-### RAG pipeline (end to end)
+## Important Deployment Note
 
-Every query runs through five stages. The LLM only ever sees real fetched data — it never invents facts.
+The app now deploys cleanly on Vercel, but the persistence layer is still SQLite-on-disk. On Vercel, the default database path becomes `/tmp/team-activity-monitor.db`, which is ephemeral.
 
-```
-User query
-    │
-    ▼  1. PARSE  src/query/parser.ts
-       Extracts intent (activity_summary / jira_only / github_commits / github_prs),
-       team member name, and timeframe from the natural-language question.
-    │
-    ▼  2. RESOLVE  src/query/identity.ts
-       Fuzzy-matches the name against config/team-members.json and per-org overrides
-       stored in SQLite. Scoring: exact (100) > word boundary (80+) > substring (70+).
-    │
-    ▼  3. RETRIEVE  src/orchestrator/activity.ts  (parallel)
-       ┌─────────────────────────────────────────────────────────────────┐
-       │ Jira  src/adapters/jira.ts                                      │
-       │   POST api.atlassian.com/ex/jira/{cloudId}/rest/api/3/search    │
-       │   Bearer {user OAuth token}  OR  Basic {service account}        │
-       │   JQL: assignee = "{accountId}" AND statusCategory != Done      │
-       │   + changelog for each issue (field changes within timeframe)   │
-       │                                                                 │
-       │ GitHub commits  src/adapters/github-commits.ts                  │
-       │   GET api.github.com/repos/{owner}/{repo}/commits               │
-       │   ?author={githubUsername}&since={timeframe.start}              │
-       │                                                                 │
-       │ GitHub PRs  src/adapters/github-prs.ts                          │
-       │   GET api.github.com/repos/{owner}/{repo}/pulls?state=all       │
-       │   filtered to user.login === githubUsername within timeframe    │
-       └─────────────────────────────────────────────────────────────────┘
-    │
-    ▼  4. STRUCTURE  src/orchestrator/activity.ts
-       Compiles all provider results into one ActivitySummary JSON:
-       { member, intent, timeframe, jira: { status, data }, github: { status, data }, caveats }
-       Source failures are captured as ProviderStatus.ok=false — they never throw.
-    │
-    ▼  5. GENERATE  src/lib/llm-pipeline.ts
-       Builds a grounded prompt containing:
-         - pre-computed counts (issues, commits, PRs, source health)
-         - step-by-step extraction instructions (chain-of-thought grounding)
-         - full ActivitySummary JSON
-       Sends to the selected LLM provider. LLM is instructed to quote keys/
-       dates/repo names verbatim from the JSON and never invent facts.
-       Returns four sections: Overview / Jira / GitHub / Caveats.
-```
+That means:
+- Preview deployments work well for demos, QA, and low-risk testing
+- single-instance hosted usage can work, but it is not durable storage
+- true multi-instance production durability still requires a future move to a managed database
 
----
+The code and docs make this explicit instead of hiding it behind old hosting assumptions.
 
-## LLM providers
+## Local Development
 
-The app supports four LLM backends. Users pick one per query from the dashboard.
-
-| Provider | Model ID prefix | Auth |
-|---|---|---|
-| Ollama (local) | `local:` | No key needed — Ollama running on `OLLAMA_BASE_URL` |
-| OpenAI | `openai:` | API key stored encrypted in SQLite per user |
-| Anthropic Claude | `claude:` | API key stored encrypted in SQLite per user |
-| Google Gemini | `gemini:` | API key stored encrypted in SQLite per user |
-
-**Routing** (`src/llm/`): `LlmProviderRegistry.parseModelId()` splits `"openai:gpt-4o"` into `{ provider, providerModelId }`. `LlmService.chat()` routes to the correct adapter. Cloud model errors propagate as typed `LlmError` — there is no silent fallback to a different model.
-
----
-
-## OAuth & data credentials
-
-### OAuth token lifecycle
-
-When a user connects GitHub or Jira via OAuth:
-
-1. The app exchanges the code for an access token + refresh token.
-2. Both tokens are encrypted with AES-256-GCM (same key as LLM API keys) and stored in `user_provider_connections`.
-3. The user's Jira cloud site ID is stored in `metadata.siteId`.
-
-At query time the app automatically uses the user's own token instead of the shared service-account credentials:
-
-- **GitHub**: standard Bearer token — same API surface as a PAT, no expiry on classic OAuth tokens.
-- **Jira**: Bearer token + Atlassian Cloud API (`api.atlassian.com/ex/jira/{siteId}/rest/api/3/...`). Jira tokens expire in ~1 hour.
-
-### Auto-refresh (Jira)
-
-Before every query the app checks whether the Jira token expires within 5 minutes. If so:
-
-```
-getActiveProviderToken()
-    ├── token still valid → use as-is
-    ├── expires within 5 min + refresh token present
-    │       → POST auth.atlassian.com/oauth/token { grant_type: refresh_token }
-    │       → save new access + refresh tokens encrypted to DB
-    │       → return new access token transparently
-    └── refresh fails / no refresh token
-            → warn in server log, fall back to JIRA_API_TOKEN service account
-```
-
-Atlassian may rotate the refresh token itself — the app always stores whichever refresh token the response returns.
-
-GitHub tokens don't expire, so no refresh is needed.
-
-### Fallback chain
-
-| User has connected? | Token expired? | Refresh available? | Adapter uses |
-|---|---|---|---|
-| Yes | No | — | User OAuth token |
-| Yes | Yes | Yes | Refreshed user OAuth token |
-| Yes | Yes | No | Service account (`JIRA_API_TOKEN` / `GITHUB_TOKEN`) |
-| No | — | — | Service account |
-
----
-
-## Fixture mode vs live mode
-
-`USE_RECORDED_FIXTURES=true` (the default in `render.yaml`) loads pre-recorded JSON from `fixtures/demo/` — no real API calls, no credentials needed. Useful for demos and local exploration.
-
-`USE_RECORDED_FIXTURES=false` enables live API calls. Requires:
-
-```env
-JIRA_BASE_URL=https://your-org.atlassian.net
-JIRA_EMAIL=service-account@your-org.com
-JIRA_API_TOKEN=...
-GITHUB_TOKEN=ghp_...
-```
-
-Then update `config/team-members.json` with real display names and GitHub usernames (Jira account IDs auto-resolve via `/rest/api/3/user/search`), and `config/repos.json` with your real org/repo pairs.
-
----
-
-## Local setup
+1. Install dependencies:
 
 ```bash
 npm install
-cp .env.example .env
-npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-### Optional: local model via Ollama
+2. Copy the environment template:
 
 ```bash
-brew install ollama          # or download from ollama.com
-ollama pull qwen2.5:7b
-npm run llm:check            # verifies OLLAMA_BASE_URL + model
+cp .env.example .env
 ```
 
-Set in `.env`:
+3. Start the backend and frontend:
+
+```bash
+npm run dev:all
+```
+
+4. Open:
+
+- backend: [http://localhost:3000](http://localhost:3000)
+- frontend dev server: [http://localhost:5173/app/](http://localhost:5173/app/)
+
+For a production-style local build:
+
+```bash
+npm run build
+npm start
+```
+
+## Local Model Setup
+
+If you want to use the local Ollama path:
+
+```bash
+ollama pull qwen2.5:7b
+npm run llm:check
+```
+
+Recommended local model env:
+
 ```env
+DEFAULT_MODEL_ID=local:qwen2.5:7b
 OLLAMA_BASE_URL=http://localhost:11434/api
 OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_KEEP_ALIVE=10m
 ```
 
-If you prefer a cloud model (OpenAI, Claude, Gemini), add your API key through the dashboard — no Ollama required.
+## Vercel Deployment
 
-### OAuth setup (optional for live data)
+### Deployment Shape
 
-To enable real GitHub and Jira OAuth sign-in:
+- Vercel uses zero-config Express support from [`app.ts`](./app.ts)
+- [`vercel.json`](./vercel.json) sets:
+  - build command: `npm run build`
+  - function timeout: 60 seconds
+  - included runtime files: `public/**/*`, `config/**/*`, `fixtures/**/*`
+- preview URLs infer `APP_BASE_URL` from `VERCEL_URL` when you do not set it explicitly
+- background polling is disabled on Vercel, and connector validation runs inline instead
 
-**GitHub**: Create an OAuth App at github.com → Settings → Developer settings → OAuth Apps.
-Callback URL: `http://localhost:3000/api/v1/auth/providers/github/callback`
+### Deploy From Git
 
-**Jira**: Create an OAuth 2.0 app at developer.atlassian.com.
-Scopes: `read:jira-work read:jira-user offline_access`
-Callback URL: `http://localhost:3000/api/v1/auth/providers/jira/callback`
+1. Import the repository into Vercel.
+2. Keep the framework preset as `Other`.
+3. Confirm the build command is `npm run build`.
+4. Set the environment variables listed below.
+5. Deploy.
 
-Add to `.env`:
-```env
-GITHUB_OAUTH_CLIENT_ID=...
-GITHUB_OAUTH_CLIENT_SECRET=...
-JIRA_OAUTH_CLIENT_ID=...
-JIRA_OAUTH_CLIENT_SECRET=...
+### Deploy With Vercel CLI
+
+```bash
+npm install -g vercel
+vercel
+vercel --prod
 ```
 
----
+### Required Vercel Dashboard Setup
 
-## Stack
+Set these in Project Settings -> Environment Variables:
 
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js, TypeScript (strict, ES modules) |
-| Web framework | Express 5 |
-| Database | SQLite via `better-sqlite3` |
-| Session store | SQLite-backed (not in-memory) |
-| Auth | bcrypt passwords + OAuth (GitHub, Jira, Google) |
-| Token encryption | AES-256-GCM (scrypt key derivation) |
-| LLM — local | Ollama (`qwen2.5:7b` default) |
-| LLM — cloud | OpenAI, Anthropic Claude, Google Gemini |
-| Logging | Pino (structured JSON, auth header redaction) |
-| Validation | Zod (all env vars + API boundaries) |
-| Testing | Vitest + Supertest |
-
----
-
-## Key source files
-
-```
-src/
-  query/
-    parser.ts          — intent + timeframe extraction
-    identity.ts        — fuzzy member matching
-  adapters/
-    jira.ts            — Jira REST API (OAuth Bearer or Basic auth)
-    github-commits.ts  — GitHub commits API
-    github-prs.ts      — GitHub pull requests API
-  orchestrator/
-    activity.ts        — parallel fetch → ActivitySummary
-  lib/
-    llm-pipeline.ts    — prompt building + Ollama local model call
-    provider-auth.ts   — OAuth flows (GitHub, Jira, Google) + Jira token refresh
-    encryption.ts      — AES-256-GCM encrypt/decrypt
-    errors.ts          — AppError, LlmError, ProviderError
-  llm/
-    registry.ts        — parseModelId() — routes "openai:gpt-4o" to OpenAI adapter
-    service.ts         — LlmService.chat() — dispatch to adapter
-    adapters/
-      openai.ts
-      anthropic.ts
-      gemini.ts
-  app.ts               — Express wiring, OAuth callbacks, query endpoint
-  db.ts                — SQLite schema, migrations, all DB methods
-  config.ts            — Zod env validation
-```
-
----
-
-## Environment variables
-
-| Variable | Required | Description |
+| Variable | Required | Notes |
 |---|---|---|
-| `SESSION_SECRET` | Yes | Signs session cookies |
-| `APP_BASE_URL` | Yes | Public URL (used for OAuth callbacks) |
-| `DATABASE_PATH` | Yes | SQLite file path |
-| `USE_RECORDED_FIXTURES` | — | `true` = demo fixtures, `false` = live APIs |
-| `JIRA_BASE_URL` | Live mode | `https://your-org.atlassian.net` |
-| `JIRA_EMAIL` | Live mode | Service account email |
-| `JIRA_API_TOKEN` | Live mode | Atlassian API token (fallback when no OAuth) |
-| `JIRA_OAUTH_CLIENT_ID` | OAuth | Atlassian OAuth app client ID |
-| `JIRA_OAUTH_CLIENT_SECRET` | OAuth | Atlassian OAuth app client secret |
-| `GITHUB_TOKEN` | Live mode | PAT with `repo:read` (fallback when no OAuth) |
-| `GITHUB_OAUTH_CLIENT_ID` | OAuth | GitHub OAuth app client ID |
-| `GITHUB_OAUTH_CLIENT_SECRET` | OAuth | GitHub OAuth app client secret |
-| `OLLAMA_BASE_URL` | Local LLM | e.g. `http://localhost:11434/api` |
-| `OLLAMA_MODEL` | Local LLM | e.g. `qwen2.5:7b` |
+| `SESSION_SECRET` | Yes | Must be a strong random secret |
+| `APP_BASE_URL` | Production strongly recommended | Set this to your production domain; previews can infer from `VERCEL_URL` |
+| `USE_RECORDED_FIXTURES` | Yes | `true` for demo mode, `false` for live Jira/GitHub traffic |
+| `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` | One required for hosted AI | Gateway auth |
+| `AI_GATEWAY_DEFAULT_MODEL` | Recommended | Default hosted model slug |
+| `DEFAULT_MODEL_ID` | Recommended | Example: `gateway:alibaba/qwen3.5-flash` |
 
----
+If `USE_RECORDED_FIXTURES=false`, also set the live provider credentials you use:
+
+| Variable | Required | Notes |
+|---|---|---|
+| `JIRA_BASE_URL` | Yes | Example: `https://your-org.atlassian.net` |
+| `JIRA_EMAIL` | Yes | Jira service account email |
+| `JIRA_API_TOKEN` | Yes | Jira fallback token |
+| `GITHUB_TOKEN` | Yes | GitHub fallback token |
+| `JIRA_OAUTH_CLIENT_ID` | Optional | Needed for user OAuth |
+| `JIRA_OAUTH_CLIENT_SECRET` | Optional | Needed for user OAuth |
+| `GITHUB_OAUTH_CLIENT_ID` | Optional | Needed for user OAuth |
+| `GITHUB_OAUTH_CLIENT_SECRET` | Optional | Needed for user OAuth |
+| `GOOGLE_OAUTH_CLIENT_ID` | Optional | Needed for artifact integrations |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Optional | Needed for artifact integrations |
+| `GOOGLE_PICKER_API_KEY` | Optional | Needed for Drive picker UX |
+| `RESEND_API_KEY` | Optional | Invitation email sending |
+| `EMAIL_FROM` | Optional | Outbound sender |
+
+### Vercel Runtime Notes
+
+- `DATABASE_PATH` defaults to `/tmp/team-activity-monitor.db` on Vercel
+- `BACKGROUND_WORKER_ENABLED` defaults to `false` on Vercel
+- cookies are marked `secure` automatically when `APP_BASE_URL` is HTTPS
+- the app works in Preview and Production with the same entrypoint
+
+## Vercel AI Gateway
+
+### What Changed
+
+- the app now supports a first-class `gateway:` provider
+- if Gateway auth is configured, the default model path becomes:
+
+```env
+gateway:${AI_GATEWAY_DEFAULT_MODEL}
+```
+
+- direct OpenAI, Anthropic, and Gemini keys are still supported as BYOK options
+- local Ollama is still supported with `local:<model>`
+
+### Recommended Gateway Defaults
+
+These values match the current repo defaults:
+
+```env
+AI_GATEWAY_BASE_URL=https://ai-gateway.vercel.sh/v1
+AI_GATEWAY_DEFAULT_MODEL=alibaba/qwen3.5-flash
+AI_GATEWAY_MODELS=alibaba/qwen3.5-flash,openai/gpt-5.4,anthropic/claude-sonnet-4-6
+DEFAULT_MODEL_ID=gateway:alibaba/qwen3.5-flash
+```
+
+### Authentication
+
+Preferred on Vercel:
+- enable AI Gateway in the Vercel project
+- use Vercel-managed OIDC auth in deployments
+
+Preferred for local development against the same project:
+
+```bash
+vercel link
+vercel env pull .env.local
+```
+
+That gives you `VERCEL_OIDC_TOKEN` locally.
+
+Fallback option:
+- set `AI_GATEWAY_API_KEY` manually
+
+### Model Routing Rules
+
+- `gateway:<provider>/<model>` uses Vercel AI Gateway
+- `local:<model>` uses Ollama
+- `openai:<model>`, `claude:<model>`, and `gemini:<model>` still use direct user-saved provider keys
+
+The app now centralizes its hosted default model selection instead of assuming Ollama everywhere.
+
+## Environment Variables
+
+The repo validates env vars in [`src/config.ts`](./src/config.ts).
+
+### Core
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3000` | Local server port |
+| `APP_NAME` | `Team Activity Monitor` | Display/app name |
+| `APP_BASE_URL` | inferred | Public base URL |
+| `APP_ENV` | inferred | `development`, `staging`, or `production` |
+| `APP_TIMEZONE` | `America/New_York` | Query and reporting timezone |
+| `SESSION_SECRET` | none in production | Session signing secret |
+| `DATABASE_PATH` | `data/app.db` locally, `/tmp/team-activity-monitor.db` on Vercel | SQLite path |
+| `BACKGROUND_WORKER_ENABLED` | `true` locally, `false` on Vercel | Enables polling worker |
+
+### Data Sources
+
+| Variable | Purpose |
+|---|---|
+| `USE_RECORDED_FIXTURES` | Switch between fixture mode and live mode |
+| `TEAM_MEMBERS_CONFIG` | Team member config JSON path |
+| `TRACKED_REPOS_CONFIG` | Tracked repo config JSON path |
+| `FIXTURE_DIR` | Fixture directory |
+| `JIRA_BASE_URL` | Jira base URL |
+| `JIRA_EMAIL` | Jira service account email |
+| `JIRA_API_TOKEN` | Jira fallback token |
+| `GITHUB_TOKEN` | GitHub fallback token |
+
+### OAuth / Artifacts
+
+| Variable | Purpose |
+|---|---|
+| `JIRA_OAUTH_CLIENT_ID` / `JIRA_OAUTH_CLIENT_SECRET` | Jira OAuth |
+| `GITHUB_OAUTH_CLIENT_ID` / `GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth |
+| `GOOGLE_PICKER_API_KEY` | Google Picker |
+| `RESEND_API_KEY` | Invitation email sending |
+| `EMAIL_FROM` | Outbound sender |
+
+### AI
+
+| Variable | Purpose |
+|---|---|
+| `DEFAULT_MODEL_ID` | Explicit default system model |
+| `AI_GATEWAY_BASE_URL` | Gateway endpoint |
+| `AI_GATEWAY_API_KEY` | Manual Gateway auth |
+| `VERCEL_OIDC_TOKEN` | Local Vercel OIDC auth |
+| `AI_GATEWAY_DEFAULT_MODEL` | Raw gateway model slug |
+| `AI_GATEWAY_MODELS` | Comma-separated gateway models exposed in the UI |
+| `OLLAMA_BASE_URL` | Local Ollama base URL |
+| `OLLAMA_MODEL` | Local Ollama default model |
+| `OLLAMA_KEEP_ALIVE` | Local model keepalive |
+
+## Health Checks and Validation
+
+After deployment, verify:
+
+1. `GET /api/health`
+2. `GET /health/ready`
+3. Register or log in successfully
+4. Open the chat UI and confirm the model selector shows Gateway models
+5. Run a sample query
+6. Patch a Jira or GitHub integration and confirm the connector status updates immediately
+
+Useful commands:
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
+
+## Source Map
+
+- [`app.ts`](./app.ts): Vercel Express entrypoint
+- [`vercel.json`](./vercel.json): Vercel build/runtime config
+- [`src/runtime.ts`](./src/runtime.ts): shared app bootstrap
+- [`src/server.ts`](./src/server.ts): local listening server
+- [`src/config.ts`](./src/config.ts): env validation and runtime inference
+- [`src/llm/adapters/gateway.ts`](./src/llm/adapters/gateway.ts): Gateway provider
+- [`src/llm/gateway-client.ts`](./src/llm/gateway-client.ts): Gateway auth and fetch helper
+
+## Migration Note
+
+Legacy hosting items removed or replaced:
+- deleted the old platform manifest
+- removed the old deploy badge and platform-specific deployment instructions from the README
+- removed the old hosting references from Terraform notes
+- removed the old hosting references from planning diagrams
+
+Vercel-specific replacements:
+- zero-config Express entrypoint via `app.ts`
+- explicit `vercel.json`
+- Vercel AI Gateway as the hosted default model path
+- inline connector validation when no background worker is running
+
+Manual Vercel dashboard setup still required:
+- set `SESSION_SECRET`
+- set `APP_BASE_URL` for production
+- enable AI Gateway and provide auth via OIDC or `AI_GATEWAY_API_KEY`
+- add live Jira/GitHub/OAuth env vars if you are not using fixture mode
 
 ## Commands
 
 ```bash
-npm run dev                          # Hot-reload dev server (port 3000)
-npm test                             # Run Vitest once (78 tests)
-npm run typecheck                    # tsc --noEmit
-npm run build                        # Compile to dist/
-npm start                            # Run compiled server
-npm run cli -- "What is John doing?" # CLI query
-npm run llm:check                    # Verify Ollama connection
-npm run smoke                        # Integration tests against live providers
+npm run dev
+npm run dev:client
+npm run dev:all
+npm run build
+npm run typecheck
+npm test
+npm start
+npm run cli -- "What is John working on this week?"
+npm run llm:check
 ```
-
----
-
-## Deploy to Render
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/felzek/team-activity-monitor)
-
-The included `render.yaml` runs in fixture mode by default. To switch to live data:
-1. Set `USE_RECORDED_FIXTURES=false` in Render env vars
-2. Add `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `GITHUB_TOKEN`
-3. Optionally add OAuth client credentials for per-user token auth

@@ -9,8 +9,8 @@ Current state:
 
 Why it is intentionally light right now:
 
-- the runnable app path in this repository is optimized for local use and free-host deployment with Render
-- the free-hosting target for immediate URL-based deployment is defined in [`render.yaml`](/Users/admin/autonomize/render.yaml)
+- the runnable app path in this repository is optimized for local use and direct Vercel deployment
+- the current hosted runtime path is the Vercel Express deployment described in the root [`README.md`](../README.md)
 - this folder is a future AWS scaffold, not a live production stack yet
 - the AWS variables are included now so CI/CD, secrets, and environment naming can stabilize before the database/auth runtime is migrated to managed AWS services
 

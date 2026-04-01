@@ -1,14 +1,16 @@
-import { loadAppConfig } from "./config.js";
-import { initializeDatabase } from "./db.js";
-import { createApp } from "./app.js";
-import { logger } from "./lib/logger.js";
 import { startJobWorker } from "./lib/job-worker.js";
+import { logger } from "./lib/logger.js";
+import { bootstrapAppRuntime } from "./runtime.js";
 
-const config = loadAppConfig();
-const database = initializeDatabase(config);
-const app = createApp(config, logger, database);
+const { app, config, database } = bootstrapAppRuntime();
 
-const worker = startJobWorker(config, database, logger);
+const worker = config.backgroundWorkerEnabled
+  ? startJobWorker(config, database, logger)
+  : {
+      stop() {
+        logger.info("Background worker is disabled for this runtime.");
+      }
+    };
 
 const server = app.listen(config.port, () => {
   logger.info(

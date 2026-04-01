@@ -106,6 +106,17 @@ describe("LlmService.listModels", () => {
     expect(models).toEqual([]);
   });
 
+  it("includes Vercel AI Gateway models without requiring a stored user key", async () => {
+    const db = makeDb({});
+    const registry = new LlmProviderRegistry().register(
+      makeAdapter("gateway", [model("gateway", "alibaba/qwen3.5-flash")])
+    );
+    const service = new LlmService(registry, db as never, logger);
+    const models = await service.listModels("user1");
+    expect(models).toHaveLength(1);
+    expect(models[0].provider).toBe("gateway");
+  });
+
   it("aggregates models from a single provider", async () => {
     const db = makeDb({ claude: "sk-ant-test" });
     const registry = new LlmProviderRegistry().register(
@@ -222,6 +233,32 @@ describe("LlmService.chat", () => {
     expect(chatSpy.mock.calls[0]![1].modelId).toBe("gpt-4o");
     // Response carries back the original namespaced modelId
     expect(resp.modelId).toBe("openai:gpt-4o");
+  });
+
+  it("routes gateway:* models without requiring a stored user key", async () => {
+    const db = makeDb({});
+    const chatSpy = vi.fn().mockResolvedValue({
+      provider: "gateway",
+      modelId: "alibaba/qwen3.5-flash",
+      message: { role: "assistant", content: "hi" },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: "stop",
+      error: null,
+    });
+    const registry = new LlmProviderRegistry().register({
+      provider: "gateway",
+      listModels: vi.fn(),
+      chat: chatSpy,
+    });
+    const service = new LlmService(registry, db as never, logger);
+    const resp = await service.chat("user1", {
+      modelId: "gateway:alibaba/qwen3.5-flash",
+      messages: [{ role: "user", content: "Hello" }],
+    });
+
+    expect(chatSpy).toHaveBeenCalledOnce();
+    expect(chatSpy.mock.calls[0]![1].modelId).toBe("alibaba/qwen3.5-flash");
+    expect(resp.modelId).toBe("gateway:alibaba/qwen3.5-flash");
   });
 
   it("throws configuration_error if no API key is configured", async () => {

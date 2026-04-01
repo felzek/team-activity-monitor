@@ -14,7 +14,13 @@ import type {
  * Provider display priority — lower = shown first in sorted results.
  * local is intentionally last since the UI groups local models separately.
  */
-const PROVIDER_PRIORITY: Record<string, number> = { claude: 0, openai: 1, gemini: 2, local: 99 };
+const PROVIDER_PRIORITY: Record<string, number> = {
+  gateway: 0,
+  claude: 1,
+  openai: 2,
+  gemini: 3,
+  local: 99,
+};
 
 export class LlmService {
   constructor(
@@ -29,6 +35,16 @@ export class LlmService {
    * Providers that fail to respond are silently omitted (logged as warnings).
    */
   async listModels(userId: string): Promise<NormalizedModel[]> {
+    const models: NormalizedModel[] = [];
+
+    if (this.registry.hasAdapter("gateway")) {
+      try {
+        models.push(...(await this.registry.getAdapter("gateway").listModels("")));
+      } catch (err) {
+        this.logger.warn({ provider: "gateway", err }, "Model listing failed for provider");
+      }
+    }
+
     const keys = this.database.listLlmProviderKeys(userId);
 
     const perProvider = await Promise.allSettled(
@@ -54,7 +70,6 @@ export class LlmService {
       })
     );
 
-    const models: NormalizedModel[] = [];
     for (const result of perProvider) {
       if (result.status === "fulfilled") models.push(...result.value);
     }
@@ -84,7 +99,7 @@ export class LlmService {
     const { provider, providerModelId } = LlmProviderRegistry.parseModelId(request.modelId);
 
     let apiKey: string;
-    if (provider === "local") {
+    if (provider === "local" || provider === "gateway") {
       // Ollama does not require a stored key — use the registered adapter directly
       apiKey = "";
     } else {
@@ -169,6 +184,21 @@ export class LlmService {
     const healths: ProviderHealth[] = results
       .filter((r): r is PromiseFulfilledResult<ProviderHealth> => r.status === "fulfilled")
       .map((r) => r.value);
+
+    if (this.registry.hasAdapter("gateway")) {
+      const gatewayAdapter = this.registry.getAdapter("gateway");
+      if (gatewayAdapter.healthCheck) {
+        const gatewayHealth = await gatewayAdapter.healthCheck("").catch(
+          (): ProviderHealth => ({
+            provider: "gateway",
+            status: "unavailable",
+            error: "Health check failed",
+            checkedAt: new Date().toISOString(),
+          })
+        );
+        healths.push(gatewayHealth);
+      }
+    }
 
     // Always check local Ollama health (no DB key needed)
     if (this.registry.hasAdapter("local")) {

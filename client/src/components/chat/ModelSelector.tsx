@@ -22,7 +22,7 @@ export function ModelSelector({ value, onChange }: Props) {
   if (displayModels.length === 0) {
     return (
       <select className="model-selector" disabled>
-        <option>No models — add API key in Settings</option>
+        <option>No models available — configure AI Gateway or add a provider key</option>
       </select>
     );
   }

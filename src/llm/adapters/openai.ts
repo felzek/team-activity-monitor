@@ -24,7 +24,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_TOKENS = 2048;
 
 /** Model ID prefixes that indicate chat capability */
-const CHAT_PREFIXES = ["gpt-4", "gpt-3.5-turbo", "o1", "o3", "o4", "chatgpt-"];
+const CHAT_PREFIXES = ["gpt-5", "gpt-4", "gpt-3.5-turbo", "o1", "o3", "o4", "chatgpt-"];
 
 /** Model ID substrings that disqualify a model for chat */
 const EXCLUDED = [
@@ -66,11 +66,18 @@ function toDisplayName(id: string): string {
 function modelSortOrder(id: string): number {
   // Lower = shown first
   const table: Array<[string, number]> = [
-    ["gpt-4o-mini", 25],
+    ["gpt-5.4", 5],
+    ["gpt-5.3-chat-latest", 8],
+    ["gpt-5.2-pro", 10],
+    ["gpt-5.2", 12],
+    ["gpt-5", 15],
+    ["gpt-5-mini", 18],
+    ["gpt-5-nano", 19],
     ["gpt-4o", 20],
+    ["gpt-4o-mini", 25],
     ["o3", 30],
-    ["o1-mini", 45],
     ["o1", 40],
+    ["o1-mini", 45],
     ["gpt-4-turbo", 60],
     ["gpt-4", 70],
     ["gpt-3.5-turbo", 80],
@@ -155,6 +162,12 @@ export class OpenAiAdapter implements LlmProviderAdapter {
       const body = (await apiFetch("/models", apiKey)) as {
         data: Array<{ id: string; created: number }>;
       };
+      const availableIds = new Set(body.data.map((model) => model.id));
+      const preferredDefaultId = availableIds.has("gpt-5.4")
+        ? "gpt-5.4"
+        : availableIds.has("gpt-5")
+          ? "gpt-5"
+          : "gpt-4o";
 
       return body.data
         .filter((m) => isChatCapable(m.id))
@@ -171,9 +184,9 @@ export class OpenAiAdapter implements LlmProviderAdapter {
             m.id.startsWith("gpt-4o") ||
             m.id.includes("4-turbo"),
           status: "available" as const,
-          isDefaultCandidate: m.id === "gpt-4o",
+          isDefaultCandidate: m.id === preferredDefaultId,
           isPinned: false,
-          latencyTier: (m.id.includes("mini") || m.id === "gpt-3.5-turbo"
+          latencyTier: (m.id.includes("mini") || m.id.includes("nano") || m.id === "gpt-3.5-turbo"
             ? "fast"
             : "medium") as "fast" | "medium",
           reasoningTier: (m.id.startsWith("o1") || m.id.startsWith("o3") || m.id.startsWith("o4")

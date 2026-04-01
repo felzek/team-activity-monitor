@@ -4,18 +4,19 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:client": "vite --config client/vite.config.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:client\"",
-    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "build:server": "rm -rf dist && tsc -p tsconfig.json",
     "build:client": "vite build --config client/vite.config.ts",
-    "build:all": "npm run build && npm run build:client",
+    "build": "npm run build:server && npm run build:client",
+    "build:all": "npm run build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p client/tsconfig.json",
     "lint": "tsc --noEmit -p tsconfig.json",
-    "start": "node dist/server.js",
+    "start": "node dist/src/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "tsx scripts/smoke.ts",

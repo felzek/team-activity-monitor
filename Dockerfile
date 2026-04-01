@@ -11,6 +11,7 @@ RUN npm ci
 
 FROM deps AS build
 COPY tsconfig.json ./
+COPY client ./client
 COPY src ./src
 COPY public ./public
 COPY config ./config
@@ -25,9 +26,9 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY public ./public
+COPY --from=build /app/public ./public
 COPY config ./config
 COPY fixtures ./fixtures
 COPY .env.example ./.env.example
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]

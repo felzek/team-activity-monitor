@@ -9,6 +9,8 @@ interface JobHandlerContext {
   logger: Logger;
 }
 
+type ConnectorProvider = "jira" | "github";
+
 type JobHandler = (
   ctx: JobHandlerContext,
   payload: Record<string, unknown>
@@ -16,7 +18,7 @@ type JobHandler = (
 
 const handlers: Record<string, JobHandler> = {
   connector_validation: async (ctx, payload) => {
-    const provider = payload.provider as string;
+    const provider = payload.provider as ConnectorProvider;
     const secretRef = payload.secretRef as string | undefined;
 
     if (!secretRef) {
@@ -149,6 +151,67 @@ async function processJob(
     }
 
     ctx.logger.error({ jobId: job.id, jobType: job.jobType, err: message }, "Job failed");
+  }
+}
+
+export async function validateConnectorConnection(
+  config: AppConfig,
+  database: AppDatabase,
+  logger: Logger,
+  organizationId: string,
+  provider: ConnectorProvider,
+  secretRef?: string
+): Promise<void> {
+  const ctx: JobHandlerContext = {
+    config,
+    database,
+    logger: logger.child({ component: "connector-validation", provider, organizationId })
+  };
+
+  if (!secretRef) {
+    ctx.logger.warn("connector_validation: no secretRef, skipping");
+    return;
+  }
+
+  try {
+    if (provider === "jira") {
+      await validateJiraConnection(ctx, secretRef);
+      database.updateJiraConnection(organizationId, {
+        status: "connected",
+        lastValidatedAt: new Date().toISOString(),
+        lastError: null
+      });
+    } else if (provider === "github") {
+      await validateGitHubConnection(ctx, secretRef);
+      database.updateGitHubConnection(organizationId, {
+        status: "connected",
+        lastValidatedAt: new Date().toISOString(),
+        lastError: null
+      });
+    } else {
+      throw new Error(`Unknown provider: ${provider}`);
+    }
+
+    ctx.logger.info("Connector validation completed");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    if (provider === "jira") {
+      database.updateJiraConnection(organizationId, {
+        status: "needs_attention",
+        lastValidatedAt: new Date().toISOString(),
+        lastError: message
+      });
+    } else {
+      database.updateGitHubConnection(organizationId, {
+        status: "needs_attention",
+        lastValidatedAt: new Date().toISOString(),
+        lastError: message
+      });
+    }
+
+    ctx.logger.error({ err: message }, "Connector validation failed");
+    throw error;
   }
 }
 

@@ -27,7 +27,11 @@ export function LlmProviders() {
   return (
     <div className="settings-group">
       <h3 className="settings-group-title">LLM Providers</h3>
-      <p className="settings-help">Add API keys to use cloud models. Without a key, queries use the free local model (Ollama).</p>
+      <p className="settings-help">
+        Add direct provider keys for BYOK access. When Vercel AI Gateway is configured for the deployment,
+        gateway models are available automatically without saving a per-user key; otherwise the app falls back
+        to the configured local Ollama model.
+      </p>
       <div className="provider-cards">
         {PROVIDERS.map((p) => (
           <ProviderCard
