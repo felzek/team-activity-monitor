@@ -518,12 +518,47 @@ describe("enterprise api routes", () => {
     );
 
     expect(invitationResponse.status).toBe(201);
+    expect(invitationResponse.body.emailSent).toBe(false);
     expect(invitationResponse.body.invitation.inviteUrl).toContain("/register?invite=");
 
     const auditResponse = await agent.get(`/api/v1/orgs/${organizationId}/audit-events`);
 
     expect(auditResponse.status).toBe(200);
     expect(auditResponse.body.items.some((item: { eventType: string }) => item.eventType === "invitation.created")).toBe(true);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("reports email delivery readiness in the session snapshot", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent();
+
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body.emailDelivery.provider).toBe("resend");
+    expect(sessionResponse.body.emailDelivery.configured).toBe(false);
+    expect(sessionResponse.body.emailDelivery.mode).toBe("manual");
+    expect(sessionResponse.body.emailDelivery.missing).toContain("RESEND_API_KEY");
+    expect(sessionResponse.body.emailDelivery.missing).toContain("EMAIL_FROM");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("marks email delivery as configured when Resend env is provided", async () => {
+    const { config, database, agent } = await buildAuthenticatedAgent({
+      RESEND_API_KEY: "re_test_key",
+      EMAIL_FROM: "Team Activity <noreply@example.com>"
+    });
+
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+
+    expect(sessionResponse.status).toBe(200);
+    expect(sessionResponse.body.emailDelivery.configured).toBe(true);
+    expect(sessionResponse.body.emailDelivery.mode).toBe("automatic");
+    expect(sessionResponse.body.emailDelivery.from).toBe("Team Activity <noreply@example.com>");
+    expect(sessionResponse.body.emailDelivery.missing).toEqual([]);
 
     database.close();
     cleanupTestConfig(config);

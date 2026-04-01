@@ -15,6 +15,15 @@ interface SessionResponse {
     id: string;
     name: string;
   };
+  emailDelivery?: {
+    provider: "resend";
+    configured: boolean;
+    mode: "automatic" | "manual";
+    from: string | null;
+    inviteBaseUrl: string;
+    missing: string[];
+    warnings: string[];
+  };
 }
 
 export function useSession() {

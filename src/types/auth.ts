@@ -162,6 +162,16 @@ export interface ProjectEntry {
   updatedAt: string;
 }
 
+export interface EmailDeliveryStatus {
+  provider: "resend";
+  configured: boolean;
+  mode: "automatic" | "manual";
+  from: string | null;
+  inviteBaseUrl: string;
+  missing: string[];
+  warnings: string[];
+}
+
 export interface SessionSnapshot {
   authenticated: boolean;
   user: SessionUser | null;
@@ -171,4 +181,5 @@ export interface SessionSnapshot {
   authMode: "local";
   providerAuth: ProviderAuthRequirement;
   llmProviderKeys: LlmProviderKey[];
+  emailDelivery: EmailDeliveryStatus;
 }

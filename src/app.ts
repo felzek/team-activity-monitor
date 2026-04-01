@@ -31,7 +31,7 @@ import { fetchJiraDashboard } from "./dashboard/jira.js";
 import { generateDashboardInsight } from "./lib/ollama.js";
 import { runChatTurn } from "./lib/chat-pipeline.js";
 import type { NormalizedChatMessage } from "./llm/types.js";
-import { sendInvitationEmail } from "./lib/email.js";
+import { getEmailDeliveryStatus, sendInvitationEmail } from "./lib/email.js";
 import { AppError, isAppError, toErrorMessage } from "./lib/errors.js";
 import { createHttpLogger } from "./lib/logger.js";
 import { buildGroundedResponsePrompt, generateGroundedResponse, RESPONSE_SYSTEM_PROMPT } from "./lib/llm-pipeline.js";
@@ -206,6 +206,7 @@ function buildSessionSnapshot(
 ): SessionSnapshot {
   const userId = request.session.userId;
   const csrfToken = request.session.csrfToken ?? null;
+  const emailDelivery = getEmailDeliveryStatus(config);
 
   if (!userId) {
     return {
@@ -216,7 +217,8 @@ function buildSessionSnapshot(
       csrfToken,
       authMode: "local",
       providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
-      llmProviderKeys: []
+      llmProviderKeys: [],
+      emailDelivery
     };
   }
 
@@ -232,7 +234,8 @@ function buildSessionSnapshot(
       csrfToken,
       authMode: "local",
       providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
-      llmProviderKeys: []
+      llmProviderKeys: [],
+      emailDelivery
     };
   }
 
@@ -257,7 +260,8 @@ function buildSessionSnapshot(
       config,
       database.getProviderAuthRequirement(userId)
     ),
-    llmProviderKeys: database.listLlmProviderKeys(userId)
+    llmProviderKeys: database.listLlmProviderKeys(userId),
+    emailDelivery
   };
 }
 

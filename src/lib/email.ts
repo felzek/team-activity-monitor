@@ -1,15 +1,52 @@
 import { Resend } from "resend";
 import type { Logger } from "pino";
 import type { AppConfig } from "../config.js";
+import type { EmailDeliveryStatus } from "../types/auth.js";
 
 let resendClient: Resend | null = null;
+let resendClientKey: string | null = null;
+const DEFAULT_EMAIL_FROM = "Team Activity <noreply@yourdomain.com>";
 
 function getClient(config: AppConfig): Resend | null {
   if (!config.resendApiKey) return null;
-  if (!resendClient) {
+  if (!resendClient || resendClientKey !== config.resendApiKey) {
     resendClient = new Resend(config.resendApiKey);
+    resendClientKey = config.resendApiKey;
   }
   return resendClient;
+}
+
+export function getEmailDeliveryStatus(config: AppConfig): EmailDeliveryStatus {
+  const missing: string[] = [];
+  const warnings: string[] = [];
+
+  if (!config.resendApiKey) {
+    missing.push("RESEND_API_KEY");
+  }
+
+  const fromLooksPlaceholder =
+    !config.emailFrom ||
+    config.emailFrom.trim().length === 0 ||
+    config.emailFrom === DEFAULT_EMAIL_FROM ||
+    config.emailFrom.includes("yourdomain.com");
+
+  if (fromLooksPlaceholder) {
+    missing.push("EMAIL_FROM");
+  }
+
+  if (config.appEnv !== "development" && config.appBaseUrl === "http://localhost:3000") {
+    warnings.push("APP_BASE_URL is still the localhost default, so invitation links will not point at your deployed app.");
+  }
+
+  return {
+    provider: "resend",
+    configured: missing.length === 0,
+    mode: missing.length === 0 ? "automatic" : "manual",
+    from: fromLooksPlaceholder ? null : config.emailFrom,
+    inviteBaseUrl: config.appBaseUrl,
+    missing,
+    warnings
+  };
 }
 
 export async function sendInvitationEmail(
@@ -23,9 +60,13 @@ export async function sendInvitationEmail(
     inviteUrl: string;
   }
 ): Promise<boolean> {
+  const status = getEmailDeliveryStatus(config);
   const client = getClient(config);
-  if (!client) {
-    logger.warn({ to: opts.to }, "RESEND_API_KEY not configured — invitation email skipped");
+  if (!client || !status.configured) {
+    logger.warn(
+      { to: opts.to, missing: status.missing, warnings: status.warnings },
+      "Invitation email skipped because email delivery is not fully configured"
+    );
     return false;
   }
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/api/client";
+import { useSession } from "@/hooks/useSession";
 import { useSessionStore } from "@/store/sessionStore";
 
 interface Member {
@@ -21,6 +22,7 @@ interface Invitation {
 
 export function TeamAccess() {
   const { currentOrgId } = useSessionStore();
+  const sessionQ = useSession();
   const qc = useQueryClient();
 
   const membersQ = useQuery({
@@ -40,6 +42,17 @@ export function TeamAccess() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const emailDelivery = sessionQ.data?.emailDelivery;
+
+  const manualInviteMessage = "Invitation created. You can copy the secure invite link below and share it directly.";
+  const inviteDeliveryStatus = emailDelivery?.configured
+    ? `Invite emails are live and will be sent from ${emailDelivery.from}.`
+    : emailDelivery?.missing.includes("EMAIL_FROM")
+      ? "Invite links are ready. Add a verified sending domain in Resend to turn on automatic email delivery."
+      : "Invite links are ready. Add your email delivery settings to turn on automatic invite emails.";
+  const inviteDeliveryHint = emailDelivery?.configured
+    ? `Invitation links use ${emailDelivery.inviteBaseUrl}.`
+    : "You can still create invitations now and share the secure link directly.";
 
   const invite = useMutation({
     mutationFn: () =>
@@ -52,7 +65,7 @@ export function TeamAccess() {
       setInviteStatus(
         data.emailSent
           ? "Invitation sent! Check their inbox."
-          : "Invitation created. Share the link manually (email sending not configured)."
+          : manualInviteMessage
       );
       void qc.invalidateQueries({ queryKey: ["invites"] });
     },
@@ -88,6 +101,19 @@ export function TeamAccess() {
 
       <div className="settings-group">
         <h3 className="settings-group-title">Invite a teammate</h3>
+        {emailDelivery && (
+          <>
+            <p className={`settings-status ${emailDelivery.configured ? "success" : "error"}`}>
+              {inviteDeliveryStatus}
+            </p>
+            <p className="settings-help">{inviteDeliveryHint}</p>
+            {emailDelivery.warnings.map((warning) => (
+              <p key={warning} className="settings-help">
+                {warning}
+              </p>
+            ))}
+          </>
+        )}
         <div className="invite-form">
           <label className="stacked-field">
             <span className="field-label">Email</span>
