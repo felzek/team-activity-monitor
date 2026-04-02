@@ -609,7 +609,7 @@ describe("enterprise api routes", () => {
 
     expect(sessionResponse.status).toBe(200);
     expect(response.status).toBe(200);
-    expect(response.body.answer).toContain("Guest mode is working.");
+    expect(response.body.answer).toContain("### Summary");
     expect(response.body.guestAccess.promptCount).toBe(1);
 
     database.close();
