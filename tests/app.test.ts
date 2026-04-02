@@ -113,6 +113,19 @@ function mockJiraOAuthResponses(
     );
 }
 
+function mockRepeatedLocalModelResponse(
+  responseText = "Summary:\nGuest mode is working.\n\nCaveats:\n- None."
+) {
+  vi.restoreAllMocks();
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+    jsonResponse({
+      message: {
+        content: responseText
+      }
+    })
+  );
+}
+
 async function getCsrf(agent: ReturnType<typeof request.agent>) {
   const response = await agent.get("/api/v1/auth/session");
   return response.body.csrfToken as string;
@@ -500,6 +513,76 @@ describe("enterprise api routes", () => {
     });
 
     expect(response.status).toBe(401);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("serves the workspace shell to guests", async () => {
+    const config = buildTestConfig();
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-workspace-shell" }), database);
+    const agent = request.agent(app);
+
+    const response = await agent.get("/app").redirects(1);
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("<div id=\"root\"></div>");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("redirects login and register routes into the in-app auth modal state", async () => {
+    const config = buildTestConfig();
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "auth-modal-redirect" }), database);
+    const agent = request.agent(app);
+
+    const loginResponse = await agent.get("/login");
+    const registerResponse = await agent.get("/register?invite=test-token");
+
+    expect(loginResponse.status).toBe(302);
+    expect(loginResponse.headers.location).toBe("/app?auth=login");
+    expect(registerResponse.status).toBe(302);
+    expect(registerResponse.headers.location).toBe("/app?auth=register&invite=test-token");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("lets guests use five chat prompts before requiring auth", async () => {
+    const config = buildTestConfig();
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-chat-limit" }), database);
+    const agent = request.agent(app);
+
+    mockRepeatedLocalModelResponse();
+
+    for (let index = 1; index <= 5; index += 1) {
+      const response = await postWithCsrf(agent, "/api/v1/chat", {
+        message: `Guest prompt ${index}`,
+        modelId: "local:qwen2.5:7b",
+        history: []
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body.answer).toContain("Summary:");
+      expect(response.body.guestAccess.promptCount).toBe(index);
+      expect(response.body.guestAccess.promptsRemaining).toBe(5 - index);
+      expect(response.body.guestAccess.authRequired).toBe(index === 5);
+    }
+
+    const blockedResponse = await postWithCsrf(agent, "/api/v1/chat", {
+      message: "One more prompt",
+      modelId: "local:qwen2.5:7b",
+      history: []
+    });
+
+    expect(blockedResponse.status).toBe(401);
+    expect(blockedResponse.body.code).toBe("GUEST_AUTH_REQUIRED");
+    expect(blockedResponse.body.guestAccess.promptCount).toBe(5);
+    expect(blockedResponse.body.guestAccess.authRequired).toBe(true);
 
     database.close();
     cleanupTestConfig(config);

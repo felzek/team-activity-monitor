@@ -15,6 +15,8 @@ export function useChatTurn() {
       // Invalidate intel queries so the board refreshes after a chat query
       void queryClient.invalidateQueries({ queryKey: ["intel-overview"] });
       void queryClient.invalidateQueries({ queryKey: ["intel-board"] });
+      void queryClient.invalidateQueries({ queryKey: ["session"] });
+      void queryClient.invalidateQueries({ queryKey: ["llm-models"] });
     },
   });
 }

@@ -9,7 +9,6 @@ import { z } from "zod";
 import {
   ensureCsrfToken,
   hashPassword,
-  redirectAuthenticatedPage,
   requireAuth,
   requireAuthPage,
   requireCsrf,
@@ -62,13 +61,65 @@ import { createConversationsRouter } from "./routes/conversations.js";
 import { createIntelligenceRouter } from "./routes/intelligence.js";
 import { createLlmRouter } from "./routes/llm.js";
 import { validateConnectorConnection } from "./lib/job-worker.js";
-import type { LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
+import type { GuestAccess, LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
 import type { ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
+const GUEST_PROMPT_LIMIT = 5;
 
 function sendPublicFile(response: express.Response, fileName: string): void {
   response.sendFile(fileName, { root: PUBLIC_DIR });
+}
+
+function buildGuestAccess(request: express.Request): GuestAccess {
+  const promptCount = Math.max(0, Math.min(request.session.guestPromptCount ?? 0, GUEST_PROMPT_LIMIT));
+  const promptsRemaining = Math.max(GUEST_PROMPT_LIMIT - promptCount, 0);
+
+  return {
+    promptCount,
+    promptLimit: GUEST_PROMPT_LIMIT,
+    promptsRemaining,
+    authRequired: promptCount >= GUEST_PROMPT_LIMIT
+  };
+}
+
+function clearGuestSession(request: express.Request): void {
+  request.session.demoOrganizationId = undefined;
+  request.session.demoUserId = undefined;
+  request.session.guestPromptCount = undefined;
+}
+
+function ensureGuestWorkspace(
+  request: express.Request,
+  database: AppDatabase,
+  config: AppConfig
+): { userId: string; organizationId: string } {
+  const demoOrgId = request.session.demoOrganizationId;
+  const demoUserId = request.session.demoUserId;
+
+  if (demoOrgId && demoUserId) {
+    request.session.guestPromptCount ??= 0;
+    return { userId: demoUserId, organizationId: demoOrgId };
+  }
+
+  const demoEmail = `demo-${randomUUID().slice(0, 8)}@demo.local`;
+  const { user: demoUser, organization: demoOrg } = database.createUserWithOrganization({
+    name: "Guest User",
+    email: demoEmail,
+    passwordHash: "demo-no-login",
+    organizationName: "Guest Workspace"
+  });
+
+  database.updateOrganizationSettings(demoOrg.id, {
+    teamMembers: config.teamMembers,
+    trackedRepos: config.trackedRepos
+  });
+
+  request.session.demoOrganizationId = demoOrg.id;
+  request.session.demoUserId = demoUser.id;
+  request.session.guestPromptCount = 0;
+
+  return { userId: demoUser.id, organizationId: demoOrg.id };
 }
 
 function fallbackDisplayName(email: string, providedName?: string | null): string {
@@ -218,7 +269,8 @@ function buildSessionSnapshot(
       csrfToken,
       authMode: "local",
       providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
-      llmProviderKeys: []
+      llmProviderKeys: [],
+      guestAccess: buildGuestAccess(request)
     };
   }
 
@@ -234,7 +286,8 @@ function buildSessionSnapshot(
       csrfToken,
       authMode: "local",
       providerAuth: applyProviderAuthRuntime(config, baseProviderAuthRequirement()),
-      llmProviderKeys: []
+      llmProviderKeys: [],
+      guestAccess: buildGuestAccess(request)
     };
   }
 
@@ -259,7 +312,8 @@ function buildSessionSnapshot(
       config,
       database.getProviderAuthRequirement(userId)
     ),
-    llmProviderKeys: database.listLlmProviderKeys(userId)
+    llmProviderKeys: database.listLlmProviderKeys(userId),
+    guestAccess: null
   };
 }
 
@@ -292,11 +346,15 @@ function providerResultPath(
   status: "connected" | "error",
   message?: string
 ): string {
-  const basePath = status === "connected" ? "/app" : entry === "connect" ? "/app" : "/login";
+  const basePath = "/app";
   const search = new URLSearchParams({
     provider_auth: status,
     provider
   });
+
+  if (entry === "login" && status === "error") {
+    search.set("auth", "login");
+  }
 
   if (message) {
     search.set("message", message);
@@ -362,7 +420,11 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     .register(new OpenAiAdapter())
     .register(new GeminiAdapter())
     .register(new OllamaAdapter(config.ollamaBaseUrl, config.ollamaModel, config.ollamaKeepAlive, logger));
-  const llmService = new LlmService(llmRegistry, database, logger);
+  const llmService = new LlmService(llmRegistry, database, logger, {
+    claude: config.anthropicApiKey,
+    openai: config.openaiApiKey,
+    gemini: config.geminiApiKey
+  });
 
   applySecurityHeaders(app, config.appEnv);
   app.use(createHttpLogger());
@@ -404,17 +466,25 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     sendPublicFile(response, "index.html");
   });
 
-  app.get("/login", redirectAuthenticatedPage, (_request, response) => {
-    sendPublicFile(response, "login.html");
+  app.get("/login", (_request, response) => {
+    response.redirect("/app?auth=login");
   });
 
-  app.get("/register", redirectAuthenticatedPage, (_request, response) => {
-    sendPublicFile(response, "register.html");
+  app.get("/register", (request, response) => {
+    const inviteToken =
+      typeof request.query.invite === "string" && request.query.invite.trim().length > 0
+        ? `&invite=${encodeURIComponent(request.query.invite.trim())}`
+        : "";
+    response.redirect(`/app?auth=register${inviteToken}`);
   });
 
   // ── React SPA routes — serve the compiled Vite bundle ──────────────────────
   const SPA_INDEX = path.resolve(process.cwd(), "public/app/index.html");
-  app.get(["/app", "/app/*splat", "/intelligence", "/chat", "/settings", "/settings/*splat"], requireAuthPage, (_request, response) => {
+  app.get(["/app", "/app/*splat", "/chat"], (_request, response) => {
+    response.sendFile(SPA_INDEX);
+  });
+
+  app.get(["/intelligence", "/settings", "/settings/*splat"], requireAuthPage, (_request, response) => {
     response.sendFile(SPA_INDEX);
   });
 
@@ -476,30 +546,13 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   // Demo endpoints — no auth required, use fixture data
   app.get("/api/v1/demo/session", (request, response) => {
     const csrfToken = request.session.csrfToken ?? null;
-    const demoOrgId = request.session.demoOrganizationId;
+    const guestWorkspace = ensureGuestWorkspace(request, database, config);
 
-    if (demoOrgId) {
-      response.json({ csrfToken, organizationId: demoOrgId });
-      return;
-    }
-
-    const demoEmail = `demo-${randomUUID().slice(0, 8)}@demo.local`;
-    const { user: demoUser, organization: demoOrg } = database.createUserWithOrganization({
-      name: "Demo User",
-      email: demoEmail,
-      passwordHash: "demo-no-login",
-      organizationName: "Demo Workspace"
+    response.json({
+      csrfToken,
+      organizationId: guestWorkspace.organizationId,
+      guestAccess: buildGuestAccess(request)
     });
-
-    database.updateOrganizationSettings(demoOrg.id, {
-      teamMembers: config.teamMembers,
-      trackedRepos: config.trackedRepos
-    });
-
-    request.session.demoOrganizationId = demoOrg.id;
-    request.session.demoUserId = demoUser.id;
-
-    response.json({ csrfToken, organizationId: demoOrg.id });
   });
 
   app.post("/api/v1/demo/query", async (request, response) => {
@@ -685,6 +738,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
           request,
           database.listUserOrganizations(user.id)
         );
+        clearGuestSession(request);
       } else {
         if (existingLink) {
           user = database.findUserById(existingLink.userId);
@@ -752,6 +806,8 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
             statusCode: 400
           });
         }
+
+        clearGuestSession(request);
 
         database.recordAuditEvent({
           organizationId: organization.id,
@@ -1002,6 +1058,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
       request.session.userId = created.user.id;
       request.session.currentOrganizationId = created.organization.id;
+      clearGuestSession(request);
 
       database.recordAuditEvent({
         organizationId: created.organization.id,
@@ -1070,6 +1127,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     request.session.userId = user.id;
     const organizations = database.listUserOrganizations(user.id);
     const organization = requireActiveOrganization(request, organizations);
+    clearGuestSession(request);
 
     database.recordAuditEvent({
       organizationId: organization.id,
@@ -1716,12 +1774,14 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
   app.post(
     "/api/v1/chat",
-    requireAuth,
-    requireOrganization(database),
     async (request, response) => {
-      const { userId, currentOrganizationId } = request.session;
-      if (!userId || !currentOrganizationId) {
-        response.status(401).json({ error: "Not authenticated" });
+      const isAuthenticated = Boolean(request.session.userId);
+      if (!isAuthenticated && buildGuestAccess(request).authRequired) {
+        response.status(401).json({
+          error: "Sign in to continue after your 5 guest prompts.",
+          code: "GUEST_AUTH_REQUIRED",
+          guestAccess: buildGuestAccess(request)
+        });
         return;
       }
 
@@ -1742,6 +1802,23 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       }
 
       const { message, modelId, conversationId, history: rawHistory } = parsed.data;
+
+      let userId: string;
+      let currentOrganizationId: string;
+      let isGuest = false;
+
+      if (request.session.userId) {
+        userId = request.session.userId;
+        currentOrganizationId = requireActiveOrganization(
+          request,
+          database.listUserOrganizations(userId)
+        ).id;
+      } else {
+        const guestWorkspace = ensureGuestWorkspace(request, database, config);
+        userId = guestWorkspace.userId;
+        currentOrganizationId = guestWorkspace.organizationId;
+        isGuest = true;
+      }
 
       const organization = database.getOrganizationForUser(userId, currentOrganizationId);
       if (!organization) {
@@ -1784,10 +1861,17 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
           cache
         });
 
+        if (isGuest) {
+          request.session.guestPromptCount = Math.min(
+            (request.session.guestPromptCount ?? 0) + 1,
+            GUEST_PROMPT_LIMIT
+          );
+        }
+
         // Persist messages if a conversationId was provided
         let activeConversationId = conversationId;
         try {
-          if (activeConversationId) {
+          if (!isGuest && activeConversationId) {
             database.addMessage({ conversationId: activeConversationId, role: "user", content: message });
             database.addMessage({
               conversationId: activeConversationId,
@@ -1808,24 +1892,30 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
         // Log to audit trail
         try {
-          database.recordAuditEvent({
-            organizationId: organization.id,
-            actorUserId: userId,
-            eventType: "chat.turn",
-            targetType: "query",
-            metadata: {
-              conversationId: activeConversationId,
-              toolsUsed: result.toolsUsed,
-              tokenUsage: result.tokenUsage,
-              latencyMs: result.totalLatencyMs,
-              partialFailures: result.partialFailures.length
-            }
-          });
+          if (!isGuest) {
+            database.recordAuditEvent({
+              organizationId: organization.id,
+              actorUserId: userId,
+              eventType: "chat.turn",
+              targetType: "query",
+              metadata: {
+                conversationId: activeConversationId,
+                toolsUsed: result.toolsUsed,
+                tokenUsage: result.tokenUsage,
+                latencyMs: result.totalLatencyMs,
+                partialFailures: result.partialFailures.length
+              }
+            });
+          }
         } catch {
           // Non-fatal
         }
 
-        response.json({ ...result, conversationId: activeConversationId });
+        response.json({
+          ...result,
+          conversationId: activeConversationId,
+          guestAccess: isGuest ? buildGuestAccess(request) : null
+        });
       } catch (err) {
         requestLogger.error({ err }, "Chat turn failed");
         response.status(500).json({

@@ -9,5 +9,6 @@ declare module "express-session" {
     providerAuthFlows?: Partial<Record<ProviderAuthProvider, ProviderAuthFlowState>>;
     demoOrganizationId?: string;
     demoUserId?: string;
+    guestPromptCount?: number;
   }
 }

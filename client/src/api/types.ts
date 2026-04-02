@@ -70,6 +70,13 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface GuestAccess {
+  promptCount: number;
+  promptLimit: number;
+  promptsRemaining: number;
+  authRequired: boolean;
+}
+
 export interface ChatTurnRequest {
   message: string;
   modelId: string;
@@ -147,6 +154,8 @@ export interface ChatTurnResult {
   sources?: SourceBadge[];
   stoppedEarly?: boolean;
   artifactSuggestions?: ArtifactSuggestion[];
+  conversationId?: string | null;
+  guestAccess?: GuestAccess | null;
 }
 
 // ── Artifacts ──

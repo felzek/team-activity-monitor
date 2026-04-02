@@ -8,6 +8,8 @@ import {
 import { useChatTurn } from "@/hooks/useChatTurn";
 import { useModels } from "@/hooks/useModels";
 import { useChatStore } from "@/store/chatStore";
+import { useSessionStore } from "@/store/sessionStore";
+import { ApiError } from "@/api/client";
 import type { ChatMessage, ChatTurnResult } from "@/api/types";
 
 let nextId = 1;
@@ -31,6 +33,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const currentConvRef = useRef<string | null>(null);
 
   const { data: models } = useModels();
+  const authenticated = useSessionStore((state) => state.authenticated);
+  const guestAccess = useSessionStore((state) => state.guestAccess);
+  const setGuestAccess = useSessionStore((state) => state.setGuestAccess);
+  const openAuthModal = useSessionStore((state) => state.openAuthModal);
   const chatTurn = useChatTurn();
   const loadMessages = useChatStore((s) => s.loadMessages);
   const conversations = useChatStore((s) => s.conversations);
@@ -137,6 +143,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || chatTurn.isPending) return;
+    if (!authenticated && guestAccess?.authRequired) {
+      openAuthModal("login");
+      return;
+    }
     const pendingAction = selectedAction;
 
     setInput("");
@@ -144,7 +154,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
 
     // Auto-create conversation if none is active
     let activeId = conversationId;
-    if (!activeId) {
+    if (authenticated && !activeId) {
       try {
         const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
         const conv = await createConversation({ title });
@@ -154,7 +164,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
       } catch {
         return;
       }
-    } else if (messages.length === 0) {
+    } else if (authenticated && messages.length === 0 && activeId) {
       // First message in an existing empty conversation — set the title
       const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
       setChatTitle(title);
@@ -184,18 +194,33 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     setHistory(newHistory);
 
     chatTurn.mutate(
-      { message: text, modelId, conversationId: activeId, history },
+      { message: text, modelId, conversationId: activeId ?? undefined, history },
       {
         onSuccess: (result) => {
+          if (result.guestAccess) {
+            setGuestAccess(result.guestAccess);
+            if (!authenticated && result.guestAccess.authRequired) {
+              openAuthModal("login");
+            }
+          }
           setMessages((prev) =>
             prev
               .filter((m) => m.id !== thinkingId)
               .concat({ id: uid(), role: "assistant", result })
           );
           setHistory((h) => [...h, { role: "assistant", content: result.answer }]);
-          void loadConversations();
+          if (authenticated) {
+            void loadConversations();
+          }
         },
         onError: (err) => {
+          if (err instanceof ApiError && err.code === "GUEST_AUTH_REQUIRED") {
+            const payload = err.payload as { guestAccess?: ChatTurnResult["guestAccess"] } | undefined;
+            if (payload?.guestAccess) {
+              setGuestAccess(payload.guestAccess);
+            }
+            openAuthModal("login");
+          }
           setMessages((prev) =>
             prev
               .filter((m) => m.id !== thinkingId)
@@ -203,7 +228,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
                 id: uid(),
                 role: "assistant",
                 result: {
-                  answer: `Error: ${err.message}`,
+                  answer:
+                    err instanceof ApiError && err.code === "GUEST_AUTH_REQUIRED"
+                      ? "You’ve reached the 5-prompt guest limit. Sign in to continue this thread."
+                      : `Error: ${err.message}`,
                   toolsUsed: [],
                   tokenUsage: null,
                   totalLatencyMs: 0,
@@ -214,14 +242,42 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
         },
       }
     );
-  }, [input, chatTurn, history, modelId, messages.length, conversationId, updateConversation, createConversation, loadConversations, selectedAction]);
+  }, [
+    authenticated,
+    conversationId,
+    createConversation,
+    chatTurn,
+    guestAccess,
+    history,
+    input,
+    loadConversations,
+    messages.length,
+    modelId,
+    openAuthModal,
+    selectedAction,
+    setGuestAccess,
+    updateConversation,
+  ]);
 
   const showWelcomeState = !loadingMessages && messages.length === 0;
+  const guestLimitReached = !authenticated && Boolean(guestAccess?.authRequired);
+  const guestHelperText = guestLimitReached
+    ? "You’ve used all 5 guest prompts. Sign in to continue in this workspace."
+    : !authenticated && guestAccess
+      ? `${guestAccess.promptsRemaining} of ${guestAccess.promptLimit} guest prompts left before sign-in is required.`
+      : "Grounded in your connected workspace data.";
 
   return (
     <div className="chat-pane">
       <div className={`chat-pane-header${showWelcomeState ? " chat-pane-header--empty" : ""}`}>
         <span className="chat-pane-title">{chatTitle}</span>
+        {!authenticated && guestAccess && (
+          <span className={`chat-guest-pill${guestLimitReached ? " is-exhausted" : ""}`}>
+            {guestLimitReached
+              ? "Sign in to continue"
+              : `${guestAccess.promptsRemaining} prompts left`}
+          </span>
+        )}
       </div>
 
       {loadingMessages ? (
@@ -233,7 +289,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
           value={input}
           onChange={handleInputChange}
           onSubmit={sendMessage}
-          disabled={chatTurn.isPending || loadingMessages}
+          disabled={chatTurn.isPending || loadingMessages || guestLimitReached}
           modelId={modelId}
           onModelChange={setModelId}
           selectedAction={selectedAction}
@@ -241,6 +297,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
           onSuggestionSelect={handleSuggestionSelect}
           onClearIntent={handleClearIntent}
           focusToken={focusToken}
+          helperText={guestHelperText}
         />
       ) : (
         <MessageList
@@ -253,12 +310,13 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
           value={input}
           onChange={handleInputChange}
           onSubmit={sendMessage}
-          disabled={chatTurn.isPending || loadingMessages}
+          disabled={chatTurn.isPending || loadingMessages || guestLimitReached}
           modelId={modelId}
           onModelChange={setModelId}
           intentLabel={selectedAction ? `Creating: ${selectedAction.label}` : null}
           onClearIntent={handleClearIntent}
           focusToken={focusToken}
+          helperText={guestHelperText}
         />
       )}
     </div>

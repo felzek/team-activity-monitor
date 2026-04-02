@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 
 import type { AppDatabase } from "../db.js";
+import type { LlmProvider } from "../types/auth.js";
 import { LlmError, normalizeProviderError } from "./errors.js";
 import { LlmProviderRegistry } from "./registry.js";
 import type {
@@ -22,12 +23,56 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   local: 99,
 };
 
+type KeyedProvider = Extract<LlmProvider, "claude" | "openai" | "gemini">;
+
 export class LlmService {
   constructor(
     private readonly registry: LlmProviderRegistry,
     private readonly database: AppDatabase,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly fallbackApiKeys: Partial<Record<KeyedProvider, string>> = {}
   ) {}
+
+  private resolveApiKey(userId: string, provider: KeyedProvider): string | null {
+    const storedKey = this.database.decryptLlmProviderKey(userId, provider);
+    if (storedKey) {
+      return storedKey;
+    }
+
+    return this.fallbackApiKeys[provider] ?? null;
+  }
+
+  private async collectProviderModels(
+    providerKeys: Array<{ provider: KeyedProvider; apiKey: string }>
+  ): Promise<NormalizedModel[]> {
+    const perProvider = await Promise.allSettled(
+      providerKeys.map(async ({ provider, apiKey }): Promise<NormalizedModel[]> => {
+        if (!this.registry.hasAdapter(provider)) {
+          this.logger.warn({ provider }, "No adapter registered for provider");
+          return [];
+        }
+
+        const adapter = this.registry.getAdapter(provider);
+        try {
+          return await adapter.listModels(apiKey);
+        } catch (err) {
+          this.logger.warn({ provider, err }, "Model listing failed for provider");
+          return [];
+        }
+      })
+    );
+
+    return perProvider
+      .filter((result): result is PromiseFulfilledResult<NormalizedModel[]> => result.status === "fulfilled")
+      .flatMap((result) => result.value);
+  }
+
+  private sortModels(models: NormalizedModel[]): NormalizedModel[] {
+    return models.sort((a, b) => {
+      const pp = (PROVIDER_PRIORITY[a.provider] ?? 9) - (PROVIDER_PRIORITY[b.provider] ?? 9);
+      return pp !== 0 ? pp : a.sortOrder - b.sortOrder;
+    });
+  }
 
   /**
    * Aggregate chat-capable models from all connected providers for this user.
@@ -45,34 +90,29 @@ export class LlmService {
       }
     }
 
-    const keys = this.database.listLlmProviderKeys(userId);
-
-    const perProvider = await Promise.allSettled(
-      keys.map(async (keyRecord): Promise<NormalizedModel[]> => {
-        const apiKey = this.database.decryptLlmProviderKey(userId, keyRecord.provider);
-        if (!apiKey) return [];
-
-        if (!this.registry.hasAdapter(keyRecord.provider)) {
-          this.logger.warn({ provider: keyRecord.provider }, "No adapter registered for provider");
-          return [];
-        }
-
-        const adapter = this.registry.getAdapter(keyRecord.provider);
-        try {
-          return await adapter.listModels(apiKey);
-        } catch (err) {
-          this.logger.warn(
-            { provider: keyRecord.provider, err },
-            "Model listing failed for provider"
-          );
-          return [];
-        }
-      })
-    );
-
-    for (const result of perProvider) {
-      if (result.status === "fulfilled") models.push(...result.value);
+    const keyedProviders = new Set<KeyedProvider>();
+    for (const keyRecord of this.database.listLlmProviderKeys(userId)) {
+      if (keyRecord.provider === "gateway" || keyRecord.provider === "local") {
+        continue;
+      }
+      keyedProviders.add(keyRecord.provider);
     }
+    for (const [provider, apiKey] of Object.entries(this.fallbackApiKeys) as Array<[KeyedProvider, string | undefined]>) {
+      if (apiKey) {
+        keyedProviders.add(provider);
+      }
+    }
+
+    models.push(
+      ...(await this.collectProviderModels(
+        Array.from(keyedProviders)
+          .map((provider) => ({
+            provider,
+            apiKey: this.resolveApiKey(userId, provider),
+          }))
+          .filter((entry): entry is { provider: KeyedProvider; apiKey: string } => Boolean(entry.apiKey))
+      ))
+    );
 
     // Local Ollama does not require a stored API key — always attempt to list
     if (this.registry.hasAdapter("local")) {
@@ -84,10 +124,37 @@ export class LlmService {
       }
     }
 
-    return models.sort((a, b) => {
-      const pp = (PROVIDER_PRIORITY[a.provider] ?? 9) - (PROVIDER_PRIORITY[b.provider] ?? 9);
-      return pp !== 0 ? pp : a.sortOrder - b.sortOrder;
-    });
+    return this.sortModels(models);
+  }
+
+  async listPublicModels(): Promise<NormalizedModel[]> {
+    const models: NormalizedModel[] = [];
+
+    if (this.registry.hasAdapter("gateway")) {
+      try {
+        models.push(...(await this.registry.getAdapter("gateway").listModels("")));
+      } catch (err) {
+        this.logger.warn({ provider: "gateway", err }, "Public model listing failed for provider");
+      }
+    }
+
+    models.push(
+      ...(await this.collectProviderModels(
+        (Object.entries(this.fallbackApiKeys) as Array<[KeyedProvider, string | undefined]>)
+          .filter(([, apiKey]) => Boolean(apiKey))
+          .map(([provider, apiKey]) => ({ provider, apiKey: apiKey! }))
+      ))
+    );
+
+    if (this.registry.hasAdapter("local")) {
+      try {
+        models.push(...(await this.registry.getAdapter("local").listModels("")));
+      } catch {
+        // Ollama not running — omit local models silently
+      }
+    }
+
+    return this.sortModels(models);
   }
 
   /**
@@ -103,10 +170,10 @@ export class LlmService {
       // Ollama does not require a stored key — use the registered adapter directly
       apiKey = "";
     } else {
-      const stored = this.database.decryptLlmProviderKey(userId, provider);
+      const stored = this.resolveApiKey(userId, provider);
       if (!stored) {
         throw new LlmError(
-          `No ${provider} API key saved yet. Add it in Settings → LLM providers first (paste and Save key).`,
+          `No ${provider} API key is configured for this account or the server default. Add it in Settings → LLM providers first if you want a personal key.`,
           { llmCode: "configuration_error", provider, statusCode: 422 }
         );
       }

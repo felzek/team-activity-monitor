@@ -82,6 +82,9 @@ const envSchema = z.object({
     "https://www.googleapis.com/auth/presentations"
   ]),
   GOOGLE_PICKER_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
   OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434/api"),
   OLLAMA_MODEL: z.string().default("qwen2.5:7b"),
   OLLAMA_KEEP_ALIVE: z.string().default("10m"),
@@ -147,6 +150,9 @@ export interface AppConfig {
   googleOAuthClientSecret?: string;
   googleOAuthScope: string[];
   googlePickerApiKey?: string;
+  openaiApiKey?: string;
+  anthropicApiKey?: string;
+  geminiApiKey?: string;
   ollamaBaseUrl: string;
   ollamaModel: string;
   ollamaKeepAlive: string;
@@ -392,6 +398,9 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     googleOAuthClientSecret: parsedEnv.GOOGLE_OAUTH_CLIENT_SECRET,
     googleOAuthScope: parsedEnv.GOOGLE_OAUTH_SCOPE,
     googlePickerApiKey: parsedEnv.GOOGLE_PICKER_API_KEY,
+    openaiApiKey: parsedEnv.OPENAI_API_KEY,
+    anthropicApiKey: parsedEnv.ANTHROPIC_API_KEY,
+    geminiApiKey: parsedEnv.GEMINI_API_KEY,
     ollamaBaseUrl: parsedEnv.OLLAMA_BASE_URL,
     ollamaModel: parsedEnv.OLLAMA_MODEL,
     ollamaKeepAlive: parsedEnv.OLLAMA_KEEP_ALIVE,

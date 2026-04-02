@@ -112,6 +112,7 @@ interface Props {
   onSuggestionSelect: (text: string) => void;
   onClearIntent: () => void;
   focusToken: number;
+  helperText?: string;
 }
 
 export function ChatWelcomeState({
@@ -126,6 +127,7 @@ export function ChatWelcomeState({
   onSuggestionSelect,
   onClearIntent,
   focusToken,
+  helperText,
 }: Props) {
   const [moreOpen, setMoreOpen] = useState(false);
   const isComposing = value.trim().length > 0;
@@ -155,7 +157,7 @@ export function ChatWelcomeState({
           onModelChange={onModelChange}
           variant="hero"
           placeholder="Ask about recent work, or ask me to create a report, sheet, slides, chart, or image."
-          helperText="Grounded in your connected workspace data."
+          helperText={helperText ?? "Grounded in your connected workspace data."}
           intentLabel={selectedAction ? `Creating: ${selectedAction.label}` : null}
           onClearIntent={onClearIntent}
           focusToken={focusToken}

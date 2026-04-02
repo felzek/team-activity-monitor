@@ -1,25 +1,52 @@
 import { create } from "zustand";
+import type { GuestAccess } from "@/api/types";
 
 interface SessionStore {
+  authenticated: boolean;
   csrfToken: string | null;
   currentOrgId: string | null;
   userDisplayName: string | null;
   userEmail: string | null;
   orgName: string | null;
-  setCsrfToken: (token: string | null) => void;
-  setCurrentOrgId: (id: string | null) => void;
-  setUser: (name: string, email: string) => void;
-  setOrgName: (name: string) => void;
+  guestAccess: GuestAccess | null;
+  authModalOpen: boolean;
+  authModalMode: "login" | "register";
+  setSession: (session: {
+    authenticated: boolean;
+    csrfToken: string | null;
+    currentOrgId: string | null;
+    userDisplayName: string | null;
+    userEmail: string | null;
+    orgName: string | null;
+    guestAccess: GuestAccess | null;
+  }) => void;
+  setGuestAccess: (guestAccess: GuestAccess | null) => void;
+  openAuthModal: (mode?: "login" | "register") => void;
+  closeAuthModal: () => void;
 }
 
 export const useSessionStore = create<SessionStore>()((set) => ({
+  authenticated: false,
   csrfToken: null,
   currentOrgId: null,
   userDisplayName: null,
   userEmail: null,
   orgName: null,
-  setCsrfToken: (token) => set({ csrfToken: token }),
-  setCurrentOrgId: (id) => set({ currentOrgId: id }),
-  setUser: (name, email) => set({ userDisplayName: name, userEmail: email }),
-  setOrgName: (name) => set({ orgName: name }),
+  guestAccess: null,
+  authModalOpen: false,
+  authModalMode: "login",
+  setSession: (session) =>
+    set((state) => ({
+      authenticated: session.authenticated,
+      csrfToken: session.csrfToken,
+      currentOrgId: session.currentOrgId,
+      userDisplayName: session.userDisplayName,
+      userEmail: session.userEmail,
+      orgName: session.orgName,
+      guestAccess: session.guestAccess,
+      authModalOpen: session.authenticated ? false : state.authModalOpen,
+    })),
+  setGuestAccess: (guestAccess) => set({ guestAccess }),
+  openAuthModal: (mode = "login") => set({ authModalOpen: true, authModalMode: mode }),
+  closeAuthModal: () => set({ authModalOpen: false }),
 }));

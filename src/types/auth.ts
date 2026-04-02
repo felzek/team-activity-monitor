@@ -162,6 +162,13 @@ export interface ProjectEntry {
   updatedAt: string;
 }
 
+export interface GuestAccess {
+  promptCount: number;
+  promptLimit: number;
+  promptsRemaining: number;
+  authRequired: boolean;
+}
+
 export interface SessionSnapshot {
   authenticated: boolean;
   user: SessionUser | null;
@@ -171,4 +178,5 @@ export interface SessionSnapshot {
   authMode: "local";
   providerAuth: ProviderAuthRequirement;
   llmProviderKeys: LlmProviderKey[];
+  guestAccess: GuestAccess | null;
 }

@@ -7,7 +7,7 @@ interface Props {
 
 export function GlobalNav({ onLogout }: Props) {
   const location = useLocation();
-  const { userDisplayName, orgName } = useSessionStore();
+  const { authenticated, guestAccess, userDisplayName, orgName } = useSessionStore();
 
   return (
     <nav className="global-nav">
@@ -22,18 +22,31 @@ export function GlobalNav({ onLogout }: Props) {
         <Link to="/app" className={`global-nav-link${location.pathname === "/app" ? " active" : ""}`}>
           Workspace
         </Link>
-        <Link to="/settings" className={`global-nav-link${location.pathname.startsWith("/settings") ? " active" : ""}`}>
-          Settings
-        </Link>
+        {authenticated && (
+          <Link to="/settings" className={`global-nav-link${location.pathname.startsWith("/settings") ? " active" : ""}`}>
+            Settings
+          </Link>
+        )}
       </div>
 
       <div className="global-nav-spacer" />
 
-      <div className="global-nav-user">
-        {orgName && <span className="global-nav-user-name">{orgName}</span>}
-        {userDisplayName && <span className="global-nav-user-name" style={{ color: "var(--text)" }}>{userDisplayName}</span>}
-        <button className="btn-secondary" onClick={onLogout}>Log out</button>
-      </div>
+      {authenticated ? (
+        <div className="global-nav-user">
+          {orgName && <span className="global-nav-user-name">{orgName}</span>}
+          {userDisplayName && <span className="global-nav-user-name" style={{ color: "var(--text)" }}>{userDisplayName}</span>}
+          <button className="btn-secondary" onClick={onLogout}>Log out</button>
+        </div>
+      ) : (
+        <div className="global-nav-guest">
+          <span className="global-nav-guest-label">Guest mode</span>
+          {guestAccess && (
+            <span className="global-nav-guest-usage">
+              {guestAccess.promptsRemaining} of {guestAccess.promptLimit} prompts left
+            </span>
+          )}
+        </div>
+      )}
     </nav>
   );
 }

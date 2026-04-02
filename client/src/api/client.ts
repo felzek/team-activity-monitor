@@ -3,7 +3,9 @@ import { useSessionStore } from "@/store/sessionStore";
 export class ApiError extends Error {
   constructor(
     message: string,
-    public readonly status: number
+    public readonly status: number,
+    public readonly code?: string,
+    public readonly payload?: unknown
   ) {
     super(message);
     this.name = "ApiError";
@@ -27,15 +29,9 @@ export async function apiFetch<T>(
   }
 
   const res = await fetch(url, { ...options, headers, credentials: "same-origin" });
-
-  if (res.status === 401) {
-    window.location.href = "/login";
-    throw new ApiError("Unauthenticated", 401);
-  }
-
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status);
+    const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
+    throw new ApiError(body.error ?? `HTTP ${res.status}`, res.status, body.code, body);
   }
 
   if (res.status === 204) return undefined as T;

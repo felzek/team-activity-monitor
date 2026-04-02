@@ -117,6 +117,19 @@ describe("LlmService.listModels", () => {
     expect(models[0].provider).toBe("gateway");
   });
 
+  it("includes fallback server-backed models when no personal key is saved", async () => {
+    const db = makeDb({});
+    const registry = new LlmProviderRegistry().register(
+      makeAdapter("openai", [model("openai", "gpt-5.4")])
+    );
+    const service = new LlmService(registry, db as never, logger, {
+      openai: "sk-server-default",
+    });
+    const models = await service.listModels("user1");
+    expect(models).toHaveLength(1);
+    expect(models[0].id).toBe("openai:gpt-5.4");
+  });
+
   it("aggregates models from a single provider", async () => {
     const db = makeDb({ claude: "sk-ant-test" });
     const registry = new LlmProviderRegistry().register(
@@ -233,6 +246,37 @@ describe("LlmService.chat", () => {
     expect(chatSpy.mock.calls[0]![1].modelId).toBe("gpt-4o");
     // Response carries back the original namespaced modelId
     expect(resp.modelId).toBe("openai:gpt-4o");
+  });
+
+  it("falls back to a server-managed provider key when no user key exists", async () => {
+    const db = makeDb({});
+    const chatSpy = vi.fn().mockResolvedValue({
+      provider: "openai",
+      modelId: "gpt-5.4",
+      message: { role: "assistant", content: "server default" },
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: "stop",
+      error: null,
+    });
+    const registry = new LlmProviderRegistry().register({
+      provider: "openai",
+      listModels: vi.fn(),
+      chat: chatSpy,
+    });
+    const service = new LlmService(registry, db as never, logger, {
+      openai: "sk-server-default",
+    });
+
+    const resp = await service.chat("user1", {
+      ...request,
+      modelId: "openai:gpt-5.4",
+    });
+
+    expect(chatSpy).toHaveBeenCalledWith(
+      "sk-server-default",
+      expect.objectContaining({ modelId: "gpt-5.4" })
+    );
+    expect(resp.message.content).toBe("server default");
   });
 
   it("routes gateway:* models without requiring a stored user key", async () => {

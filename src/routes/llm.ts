@@ -30,9 +30,10 @@ export function createLlmRouter(service: LlmService, _logger: Logger): express.R
    * Returns all chat-capable models from the user's connected providers,
    * sorted by provider priority then model sort order.
    */
-  router.get("/models", requireAuth, async (request, response) => {
-    const userId = request.session.userId!;
-    const models = await service.listModels(userId);
+  router.get("/models", async (request, response) => {
+    const models = request.session.userId
+      ? await service.listModels(request.session.userId)
+      : await service.listPublicModels();
     response.json({ models });
   });
 

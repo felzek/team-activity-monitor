@@ -2,23 +2,28 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/api/client";
 import { useSessionStore } from "@/store/sessionStore";
 import { useEffect } from "react";
+import type { GuestAccess } from "@/api/types";
 
-interface SessionResponse {
+export interface SessionResponse {
   authenticated: boolean;
-  csrfToken: string;
+  csrfToken: string | null;
   user?: {
     id: string;
-    displayName: string;
+    name: string;
     email: string;
   };
   currentOrganization?: {
     id: string;
     name: string;
   };
+  guestAccess: GuestAccess | null;
+  providerAuth: {
+    providerModes: Record<"github" | "jira" | "google", "oauth" | "unavailable">;
+  };
 }
 
 export function useSession() {
-  const { setCsrfToken, setCurrentOrgId, setUser, setOrgName } = useSessionStore();
+  const setSession = useSessionStore((state) => state.setSession);
 
   const query = useQuery({
     queryKey: ["session"],
@@ -29,16 +34,17 @@ export function useSession() {
 
   useEffect(() => {
     if (query.data) {
-      setCsrfToken(query.data.csrfToken ?? null);
-      setCurrentOrgId(query.data.currentOrganization?.id ?? null);
-      if (query.data.user) {
-        setUser(query.data.user.displayName, query.data.user.email);
-      }
-      if (query.data.currentOrganization) {
-        setOrgName(query.data.currentOrganization.name);
-      }
+      setSession({
+        authenticated: query.data.authenticated,
+        csrfToken: query.data.csrfToken ?? null,
+        currentOrgId: query.data.currentOrganization?.id ?? null,
+        userDisplayName: query.data.user?.name ?? null,
+        userEmail: query.data.user?.email ?? null,
+        orgName: query.data.currentOrganization?.name ?? null,
+        guestAccess: query.data.guestAccess ?? null,
+      });
     }
-  }, [query.data, setCsrfToken, setCurrentOrgId, setUser, setOrgName]);
+  }, [query.data, setSession]);
 
   return query;
 }
