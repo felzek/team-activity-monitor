@@ -128,33 +128,22 @@ export class LlmService {
   }
 
   async listPublicModels(): Promise<NormalizedModel[]> {
-    const models: NormalizedModel[] = [];
-
-    if (this.registry.hasAdapter("gateway")) {
-      try {
-        models.push(...(await this.registry.getAdapter("gateway").listModels("")));
-      } catch (err) {
-        this.logger.warn({ provider: "gateway", err }, "Public model listing failed for provider");
-      }
-    }
-
-    models.push(
-      ...(await this.collectProviderModels(
-        (Object.entries(this.fallbackApiKeys) as Array<[KeyedProvider, string | undefined]>)
-          .filter(([, apiKey]) => Boolean(apiKey))
-          .map(([provider, apiKey]) => ({ provider, apiKey: apiKey! }))
-      ))
-    );
-
-    if (this.registry.hasAdapter("local")) {
-      try {
-        models.push(...(await this.registry.getAdapter("local").listModels("")));
-      } catch {
-        // Ollama not running — omit local models silently
-      }
-    }
-
-    return this.sortModels(models);
+    return [
+      {
+        id: "local:guest-preview",
+        provider: "local",
+        providerModelId: "guest-preview",
+        displayName: "Guest Preview",
+        supportsChat: true,
+        supportsStreaming: false,
+        supportsTools: true,
+        supportsVision: false,
+        status: "available",
+        isDefaultCandidate: true,
+        isPinned: true,
+        sortOrder: 0,
+      },
+    ];
   }
 
   /**

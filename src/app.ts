@@ -62,7 +62,7 @@ import { createIntelligenceRouter } from "./routes/intelligence.js";
 import { createLlmRouter } from "./routes/llm.js";
 import { validateConnectorConnection } from "./lib/job-worker.js";
 import type { GuestAccess, LlmProvider, OrganizationSettings, OrganizationSummary, ProviderAuthProvider, SessionSnapshot } from "./types/auth.js";
-import type { ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
+import type { ActivitySummary, ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
 const GUEST_PROMPT_LIMIT = 5;
@@ -120,6 +120,122 @@ function ensureGuestWorkspace(
   request.session.guestPromptCount = 0;
 
   return { userId: demoUser.id, organizationId: demoOrg.id };
+}
+
+function formatIsoDate(value: string | undefined): string {
+  return value ? value.slice(0, 10) : "Unknown date";
+}
+
+function buildGuestPreviewSources(summary: ActivitySummary): Array<{ source: string; freshness: "live" | "cached" }> {
+  const sources: Array<{ source: string; freshness: "live" | "cached" }> = [];
+
+  if (summary.jira.status.ok || summary.jira.data.issues.length > 0) {
+    sources.push({ source: "jira", freshness: "cached" });
+  }
+
+  if (summary.github.status.ok || summary.github.data.commits.length > 0 || summary.github.data.pullRequests.length > 0) {
+    sources.push({ source: "github", freshness: "cached" });
+  }
+
+  return sources;
+}
+
+function formatGuestPreviewAnswer(summary: ActivitySummary): string {
+  if (summary.needsClarification) {
+    return [
+      "### Summary",
+      summary.clarificationReason ?? "Ask about a specific teammate to continue the guest preview.",
+      "",
+      "### Demo workspace",
+      "Guest mode uses a fixture-backed workspace preview so you can try the product before signing in."
+    ].join("\n");
+  }
+
+  const issueCount = summary.jira.data.issues.length;
+  const commitCount = summary.github.data.commits.length;
+  const prCount = summary.github.data.pullRequests.length;
+  const repoCount = summary.github.data.recentRepos.length;
+
+  const lines = [
+    "### Summary",
+    `${summary.member.displayName} has ${issueCount} Jira updates, ${commitCount} commits, and ${prCount} pull requests in ${summary.timeframe.label}.`,
+    "",
+  ];
+
+  if (issueCount > 0) {
+    lines.push("### Jira Issues");
+    for (const issue of summary.jira.data.issues.slice(0, 5)) {
+      lines.push(`- ${issue.key} — ${issue.summary} (${issue.status}) — updated ${formatIsoDate(issue.updated)}`);
+    }
+    lines.push("");
+  }
+
+  if (commitCount > 0) {
+    lines.push("### GitHub Commits");
+    for (const commit of summary.github.data.commits.slice(0, 5)) {
+      lines.push(`- ${commit.repo}/${commit.sha.slice(0, 7)} — ${commit.message.split("\n")[0]} — ${formatIsoDate(commit.authoredAt)}`);
+    }
+    lines.push("");
+  }
+
+  if (prCount > 0) {
+    lines.push("### GitHub Pull Requests");
+    for (const pullRequest of summary.github.data.pullRequests.slice(0, 5)) {
+      lines.push(`- ${pullRequest.repo}#${pullRequest.number} — ${pullRequest.title} (${pullRequest.state}) — updated ${formatIsoDate(pullRequest.updatedAt)}`);
+    }
+    lines.push("");
+  }
+
+  if (repoCount > 0) {
+    lines.push("### Active Repos");
+    lines.push(`- ${summary.github.data.recentRepos.slice(0, 5).join(", ")}`);
+    lines.push("");
+  }
+
+  lines.push("### Caveats");
+  if (summary.caveats.length > 0) {
+    for (const caveat of summary.caveats) {
+      lines.push(`- ${caveat}`);
+    }
+  } else {
+    lines.push("- Guest mode is fixture-backed, so this preview is deterministic and limited to the sample workspace.");
+  }
+
+  return lines.join("\n");
+}
+
+async function runGuestPreviewTurn(
+  message: string,
+  config: AppConfig,
+  database: AppDatabase,
+  organizationId: string,
+  logger: Logger
+) {
+  const orgSettings = database.getOrganizationSettings(organizationId);
+  const previewConfig = {
+    ...config,
+    useRecordedFixtures: true,
+    teamMembers: orgSettings.teamMembers,
+    trackedRepos: orgSettings.trackedRepos
+  };
+  const parsedQuery = parseQuery(message, config.appTimezone);
+  const identity = resolveIdentity(
+    parsedQuery.memberText,
+    parsedQuery.rawQuery,
+    previewConfig.teamMembers
+  );
+  const summary = await buildActivitySummary(previewConfig, parsedQuery, identity, logger);
+
+  return {
+    answer: formatGuestPreviewAnswer(summary),
+    toolsUsed: ["guest_preview"],
+    sources: buildGuestPreviewSources(summary),
+    partialFailures: [],
+    tokenUsage: { input: 0, output: 0 },
+    totalLatencyMs: 0,
+    stoppedEarly: false,
+    artifactSuggestions: [] as const,
+  };
 }
 
 function fallbackDisplayName(email: string, providedName?: string | null): string {
@@ -1829,6 +1945,39 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       const orgSettings = database.getOrganizationSettings(organization.id);
       const executionConfig = { ...config, teamMembers: orgSettings.teamMembers, trackedRepos: orgSettings.trackedRepos };
 
+      if (isGuest) {
+        const requestLogger = logger.child({ userId, orgId: organization.id, route: "guest-chat-preview" });
+
+        try {
+          const previewResult = await runGuestPreviewTurn(
+            message,
+            executionConfig,
+            database,
+            organization.id,
+            requestLogger
+          );
+
+          request.session.guestPromptCount = Math.min(
+            (request.session.guestPromptCount ?? 0) + 1,
+            GUEST_PROMPT_LIMIT
+          );
+
+          response.json({
+            ...previewResult,
+            conversationId: null,
+            guestAccess: buildGuestAccess(request)
+          });
+        } catch (err) {
+          requestLogger.error({ err }, "Guest preview turn failed");
+          response.status(500).json({
+            error: toErrorMessage(err),
+            code: "CHAT_PIPELINE_ERROR"
+          });
+        }
+
+        return;
+      }
+
       // Load OAuth tokens
       const [userGitHubToken, userJiraToken] = await Promise.all([
         getActiveProviderToken(userId, "github", config, database, logger),
@@ -1860,13 +2009,6 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
           logger: requestLogger,
           cache
         });
-
-        if (isGuest) {
-          request.session.guestPromptCount = Math.min(
-            (request.session.guestPromptCount ?? 0) + 1,
-            GUEST_PROMPT_LIMIT
-          );
-        }
 
         // Persist messages if a conversationId was provided
         let activeConversationId = conversationId;

@@ -561,13 +561,13 @@ describe("enterprise api routes", () => {
 
     for (let index = 1; index <= 5; index += 1) {
       const response = await postWithCsrf(agent, "/api/v1/chat", {
-        message: `Guest prompt ${index}`,
+        message: "What is John working on this week?",
         modelId: "local:qwen2.5:7b",
         history: []
       });
 
       expect(response.status).toBe(200);
-      expect(response.body.answer).toContain("Summary:");
+      expect(response.body.answer).toContain("### Summary");
       expect(response.body.guestAccess.promptCount).toBe(index);
       expect(response.body.guestAccess.promptsRemaining).toBe(5 - index);
       expect(response.body.guestAccess.authRequired).toBe(index === 5);
