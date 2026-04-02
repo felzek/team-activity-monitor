@@ -108,7 +108,6 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     const conv = conversations.find((c) => c.id === conversationId);
     if (conv) setChatTitle(conv.title);
 
-    setChatStarted(false);
     setLoadingMessages(true);
     loadMessages(conversationId)
       .then((data) => {
