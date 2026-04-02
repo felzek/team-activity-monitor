@@ -174,28 +174,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     setInput("");
     setSelectedAction(null);
 
-    // Auto-create conversation if none is active
-    let activeId = conversationId;
-    if (authenticated && !activeId) {
-      try {
-        const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
-        const conv = await createConversation({ title });
-        activeId = conv.id;
-        currentConvRef.current = activeId;
-        setChatTitle(title);
-      } catch {
-        return;
-      }
-    } else if (authenticated && messages.length === 0 && activeId) {
-      // First message in an existing empty conversation — set the title
-      const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
-      setChatTitle(title);
-      void updateConversation(activeId, { title });
-    }
-
     const userMsgId = uid();
     const thinkingId = uid();
 
+    // Transition to chat view immediately so the screen doesn't stay on welcome state
     setMessages((prev) => [
       ...prev,
       { id: userMsgId, role: "user", content: text },
@@ -214,6 +196,25 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
 
     const newHistory: ChatMessage[] = [...history, { role: "user", content: text }];
     setHistory(newHistory);
+
+    // Auto-create conversation if none is active (after UI transition)
+    let activeId = conversationId;
+    if (authenticated && !activeId) {
+      try {
+        const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
+        const conv = await createConversation({ title });
+        activeId = conv.id;
+        currentConvRef.current = activeId;
+        setChatTitle(title);
+      } catch {
+        // Non-fatal: UI already transitioned, continue without a saved conversation
+      }
+    } else if (authenticated && messages.length === 0 && activeId) {
+      // First message in an existing empty conversation — set the title
+      const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
+      setChatTitle(title);
+      void updateConversation(activeId, { title });
+    }
 
     chatTurn.mutate(
       { message: text, modelId, conversationId: activeId ?? undefined, history },
