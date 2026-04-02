@@ -583,7 +583,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   });
 
   app.get("/login", (_request, response) => {
-    response.redirect("/app?auth=login");
+    response.redirect("/app");
   });
 
   app.get("/register", (request, response) => {

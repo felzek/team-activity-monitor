@@ -216,7 +216,7 @@ export function requireAuthPage(
   next: NextFunction
 ): void {
   if (!request.session.userId) {
-    response.redirect("/app?auth=login");
+    response.redirect("/app");
     return;
   }
 

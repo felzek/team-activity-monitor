@@ -533,7 +533,7 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
-  it("redirects login and register routes into the in-app auth modal state", async () => {
+  it("redirects login to the guest workspace and keeps invite registration in-app", async () => {
     const config = buildTestConfig();
     const database = initializeDatabase(config);
     const app = createApp(config, logger.child({ test: "auth-modal-redirect" }), database);
@@ -543,7 +543,7 @@ describe("enterprise api routes", () => {
     const registerResponse = await agent.get("/register?invite=test-token");
 
     expect(loginResponse.status).toBe(302);
-    expect(loginResponse.headers.location).toBe("/app?auth=login");
+    expect(loginResponse.headers.location).toBe("/app");
     expect(registerResponse.status).toBe(302);
     expect(registerResponse.headers.location).toBe("/app?auth=register&invite=test-token");
 

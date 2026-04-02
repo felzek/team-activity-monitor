@@ -51,7 +51,7 @@ function protectedElement(
   authenticated: boolean,
   element: ReactElement
 ): ReactElement {
-  return authenticated ? element : <Navigate to="/app?auth=login" replace />;
+  return authenticated ? element : <Navigate to="/app" replace />;
 }
 
 function AppLayout() {
