@@ -1,7 +1,6 @@
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
-import { loadFixture } from "../lib/fixtures.js";
 import { fetchJson } from "../lib/http.js";
 import type { ResolvedTimeframe, TeamMember } from "../types/activity.js";
 import type { GitHubAdapterResult } from "../types/github.js";
@@ -32,13 +31,6 @@ export async function fetchGitHubCommits(
   logger: Logger,
   tokenOverride?: string
 ): Promise<GitHubAdapterResult> {
-  if (config.useRecordedFixtures) {
-    return loadFixture<GitHubAdapterResult>(
-      config.fixtureDir,
-      `github-commits.${member.id}.json`
-    );
-  }
-
   if (!member.githubUsername) {
     return {
       commits: [],

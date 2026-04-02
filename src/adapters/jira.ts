@@ -1,7 +1,6 @@
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
-import { loadFixture } from "../lib/fixtures.js";
 import { fetchJson } from "../lib/http.js";
 import { isWithinTimeframe } from "../query/timeframe.js";
 import type { JiraIssueChange, ResolvedTimeframe, TeamMember } from "../types/activity.js";
@@ -145,10 +144,6 @@ export async function fetchJiraActivity(
   logger: Logger,
   tokens?: { jiraToken?: string; jiraSiteId?: string }
 ): Promise<JiraAdapterResult> {
-  if (config.useRecordedFixtures) {
-    return loadFixture<JiraAdapterResult>(config.fixtureDir, `jira.${member.id}.json`);
-  }
-
   const jiraToken = tokens?.jiraToken;
   const jiraSiteId = tokens?.jiraSiteId;
   const apiBase = buildJiraApiBase(config, jiraSiteId);

@@ -1,10 +1,8 @@
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
-import { loadFixture } from "../lib/fixtures.js";
 import { fetchJson } from "../lib/http.js";
 import { toErrorMessage } from "../lib/errors.js";
-import type { JiraAdapterResult } from "../types/jira.js";
 import type { JiraIssueActivity, TeamMember } from "../types/activity.js";
 import type {
   ConnectionHealth,
@@ -75,20 +73,6 @@ function unavailableHealth(reason: string): ConnectionHealth {
   return { connected: false, mode: "unavailable", displayName: null, errorMessage: reason };
 }
 
-function issueRowFromFixture(issue: JiraIssueActivity, assignee: string): JiraIssueRow {
-  return {
-    key: issue.key,
-    summary: issue.summary,
-    status: issue.status,
-    statusCategory: guessStatusCategory(issue.status),
-    issueType: issue.issueType ?? null,
-    priority: issue.priority ?? null,
-    assignee,
-    updated: issue.updated,
-    url: issue.url ?? null
-  };
-}
-
 function issueRowFromApi(issue: JiraSearchIssue, jiraBaseUrl: string): JiraIssueRow {
   return {
     key: issue.key,
@@ -118,59 +102,6 @@ export async function fetchJiraDashboard(
   logger: Logger
 ): Promise<JiraDashboardData> {
   const now = new Date().toISOString();
-
-  if (config.useRecordedFixtures) {
-    const allIssues: JiraIssueRow[] = [];
-
-    for (const member of teamMembers) {
-      try {
-        const result = loadFixture<JiraAdapterResult>(
-          config.fixtureDir,
-          `jira.${member.id}.json`
-        );
-        for (const issue of result.issues) {
-          allIssues.push(issueRowFromFixture(issue, member.displayName));
-        }
-      } catch {
-        // fixture missing for this member, skip silently
-      }
-    }
-
-    const unique = dedupeByKey(allIssues);
-    const openIssues = unique.filter((i) => i.statusCategory !== "done");
-    const inProgress = unique.filter((i) => i.statusCategory === "inprogress");
-    const recentlyUpdated = [...unique]
-      .sort((a, b) => b.updated.localeCompare(a.updated))
-      .slice(0, 20);
-
-    const projectKeySet = new Set(unique.map((i) => i.key.split("-")[0]));
-    const projects: JiraProjectStat[] = Array.from(projectKeySet).map((key) => ({
-      key,
-      name: key,
-      openIssueCount: openIssues.filter((i) => i.key.startsWith(`${key}-`)).length
-    }));
-
-    return {
-      health: {
-        connected: true,
-        mode: "fixture",
-        displayName: "Fixture Mode",
-        errorMessage: null
-      },
-      timeframeLabel: "Last 7 days (fixture data)",
-      metrics: {
-        openIssues: openIssues.length,
-        inProgress: inProgress.length,
-        recentlyUpdated: recentlyUpdated.length,
-        projects: projects.length
-      },
-      openIssues,
-      recentlyUpdated,
-      projects,
-      fetchedAt: now,
-      caveats: ["Showing fixture data — live Jira API calls are disabled in this mode."]
-    };
-  }
 
   if (!config.jiraBaseUrl || !config.jiraApiToken || !config.jiraEmail) {
     return {

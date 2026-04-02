@@ -16,7 +16,6 @@ const server = app.listen(config.port, () => {
   logger.info(
     {
       port: config.port,
-      mode: config.useRecordedFixtures ? "fixture" : "live",
       databasePath: config.databasePath
     },
     "Team activity monitor server started"

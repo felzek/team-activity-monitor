@@ -2528,7 +2528,7 @@ export function initializeDatabase(config: AppConfig): AppDatabase {
   const database = new AppDatabase(connection, {
     teamMembers: config.teamMembers,
     trackedRepos: config.trackedRepos,
-    defaultConnectionStatus: config.useRecordedFixtures ? "connected" : "pending",
+    defaultConnectionStatus: "pending",
     encryptionSecret: config.sessionSecret
   });
 

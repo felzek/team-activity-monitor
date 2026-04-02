@@ -49,11 +49,6 @@ async function smokeGitHub(token: string) {
 async function main() {
   const config = loadAppConfig();
 
-  if (config.useRecordedFixtures) {
-    console.log("Fixture mode is enabled. Smoke checks are skipped in fallback mode.");
-    return;
-  }
-
   const [jira, github] = await Promise.all([
     smokeJira(config.jiraBaseUrl!, config.jiraEmail!, config.jiraApiToken!),
     smokeGitHub(config.githubToken!)

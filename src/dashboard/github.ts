@@ -1,10 +1,8 @@
 import type { Logger } from "pino";
 
 import type { AppConfig } from "../config.js";
-import { loadFixture } from "../lib/fixtures.js";
 import { fetchJson } from "../lib/http.js";
 import { toErrorMessage } from "../lib/errors.js";
-import type { GitHubAdapterResult } from "../types/github.js";
 import type { TeamMember, TrackedRepo } from "../types/activity.js";
 import type {
   ConnectionHealth,
@@ -49,57 +47,6 @@ function unavailableHealth(reason: string): ConnectionHealth {
   return { connected: false, mode: "unavailable", displayName: null, errorMessage: reason };
 }
 
-function aggregateFixtures(
-  config: AppConfig,
-  teamMembers: TeamMember[]
-): { commits: GitHubCommitRow[]; prs: GitHubPRRow[] } {
-  const commits: GitHubCommitRow[] = [];
-  const prs: GitHubPRRow[] = [];
-
-  // Fixture data is split: commits in github-commits.*.json, PRs in github-prs.*.json
-  const fixtureNames = ["github-commits", "github-prs"] as const;
-
-  for (const member of teamMembers) {
-    for (const prefix of fixtureNames) {
-      try {
-        const result = loadFixture<GitHubAdapterResult>(
-          config.fixtureDir,
-          `${prefix}.${member.id}.json`
-        );
-        for (const c of result.commits) {
-          commits.push({
-            sha: c.sha,
-            repo: c.repo,
-            message: c.message,
-            author: member.displayName,
-            authoredAt: c.authoredAt,
-            url: c.url ?? null
-          });
-        }
-        for (const pr of result.pullRequests) {
-          prs.push({
-            number: pr.number,
-            repo: pr.repo,
-            title: pr.title,
-            state: pr.isOpen ? "open" : "closed",
-            isOpen: pr.isOpen,
-            author: member.displayName,
-            updatedAt: pr.updatedAt,
-            url: pr.url ?? null
-          });
-        }
-      } catch {
-        // fixture missing for this member/prefix, skip silently
-      }
-    }
-  }
-
-  return {
-    commits: commits.sort((a, b) => b.authoredAt.localeCompare(a.authoredAt)),
-    prs: prs.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-  };
-}
-
 export async function fetchGitHubDashboard(
   config: AppConfig,
   teamMembers: TeamMember[],
@@ -108,44 +55,6 @@ export async function fetchGitHubDashboard(
 ): Promise<GitHubDashboardData> {
   const now = new Date().toISOString();
   const enabledRepos = trackedRepos.filter((r) => !r.disabled);
-
-  if (config.useRecordedFixtures) {
-    const { commits, prs } = aggregateFixtures(config, teamMembers);
-    const openPRs = prs.filter((pr) => pr.isOpen);
-    const activeRepoSet = new Set([
-      ...commits.map((c) => c.repo),
-      ...openPRs.map((pr) => pr.repo)
-    ]);
-    const repoStats: GitHubRepoStat[] = enabledRepos.map(({ owner, repo }) => {
-      const fullName = `${owner}/${repo}`;
-      return {
-        fullName,
-        commitCount: commits.filter((c) => c.repo === fullName).length,
-        openPRCount: openPRs.filter((pr) => pr.repo === fullName).length,
-        lastActivityAt: commits.find((c) => c.repo === fullName)?.authoredAt ?? null
-      };
-    });
-    return {
-      health: {
-        connected: true,
-        mode: "fixture",
-        displayName: "Fixture Mode",
-        errorMessage: null
-      },
-      timeframeLabel: "Last 7 days (fixture data)",
-      metrics: {
-        totalCommits: commits.length,
-        openPRs: openPRs.length,
-        activeRepos: activeRepoSet.size,
-        trackedRepos: enabledRepos.length
-      },
-      repoStats,
-      recentCommits: commits.slice(0, 25),
-      openPullRequests: openPRs,
-      fetchedAt: now,
-      caveats: ["Showing fixture data — live GitHub API calls are disabled in this mode."]
-    };
-  }
 
   if (!config.githubToken) {
     return {

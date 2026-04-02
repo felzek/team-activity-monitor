@@ -44,10 +44,8 @@ const envSchema = z.object({
   APP_NAME: z.string().default("Team Activity Monitor"),
   APP_BASE_URL: z.string().url().optional(),
   APP_TIMEZONE: z.string().default("America/New_York"),
-  USE_RECORDED_FIXTURES: booleanString.default(false),
   TEAM_MEMBERS_CONFIG: z.string().default("config/team-members.json"),
   TRACKED_REPOS_CONFIG: z.string().default("config/repos.json"),
-  FIXTURE_DIR: z.string().default("fixtures/demo"),
   DATABASE_PATH: z.string().optional(),
   SESSION_SECRET: z.string().default("change-me-in-production"),
   APP_ENV: z.enum(["development", "staging", "production"]).optional(),
@@ -126,10 +124,8 @@ export interface AppConfig {
   vercelEnv?: "development" | "preview" | "production";
   secureCookies: boolean;
   awsRegion: string;
-  useRecordedFixtures: boolean;
   teamMembersConfigPath: string;
   trackedReposConfigPath: string;
-  fixtureDir: string;
   databasePath: string;
   databasePersistence: "durable" | "ephemeral";
   sessionSecret: string;
@@ -353,11 +349,6 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   // Repos may be empty when using OAuth-based per-org repo discovery — not a startup error.
 
-  if (!parsedEnv.USE_RECORDED_FIXTURES) {
-    // Service-account credentials are optional when OAuth is configured; they serve as fallbacks.
-    // No startup error — missing credentials surface as per-query provider failures.
-  }
-
   return {
     port: parsedEnv.PORT,
     appName: parsedEnv.APP_NAME,
@@ -373,10 +364,8 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         : undefined,
     secureCookies: appBaseUrl.startsWith("https://"),
     awsRegion: parsedEnv.AWS_REGION,
-    useRecordedFixtures: parsedEnv.USE_RECORDED_FIXTURES,
     teamMembersConfigPath: resolveFromCwd(parsedEnv.TEAM_MEMBERS_CONFIG),
     trackedReposConfigPath: resolveFromCwd(parsedEnv.TRACKED_REPOS_CONFIG),
-    fixtureDir: resolveFromCwd(parsedEnv.FIXTURE_DIR),
     databasePath: resolveFromCwd(databasePath),
     databasePersistence,
     sessionSecret: parsedEnv.SESSION_SECRET,
