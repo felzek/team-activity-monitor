@@ -295,9 +295,9 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const showWelcomeState = !loadingMessages && messages.length === 0;
   const guestLimitReached = !authenticated && Boolean(guestAccess?.authRequired);
   const guestHelperText = guestLimitReached
-    ? "You’ve used all 5 guest prompts. Sign in to continue in this workspace."
+    ? "Sign in to continue your session."
     : !authenticated && guestAccess
-      ? `${guestAccess.promptsRemaining} of ${guestAccess.promptLimit} guest prompts left. The sample workspace is unlocked for prompting only.`
+      ? "The sample workspace is unlocked for prompting only."
       : "Grounded in your connected workspace data.";
 
   return (
@@ -306,9 +306,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
         <span className="chat-pane-title">{chatTitle}</span>
         {!authenticated && guestAccess && (
           <span className={`chat-guest-pill${guestLimitReached ? " is-exhausted" : ""}`}>
-            {guestLimitReached
-              ? "Sign in to continue"
-              : `${guestAccess.promptsRemaining} prompts left`}
+            {guestLimitReached ? "Sign in to continue" : "Guest preview"}
           </span>
         )}
       </div>

@@ -67,7 +67,7 @@ import type { GuestAccess, LlmProvider, OrganizationSettings, OrganizationSummar
 import type { ActivitySummary, ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
-const GUEST_PROMPT_LIMIT = 5;
+const GUEST_PROMPT_LIMIT = 1000;
 
 function sendPublicFile(response: express.Response, fileName: string): void {
   response.sendFile(fileName, { root: PUBLIC_DIR });

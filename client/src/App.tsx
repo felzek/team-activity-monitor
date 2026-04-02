@@ -123,7 +123,10 @@ function AppLayout() {
     navigate(`${location.pathname}${buildSearch(params)}`, { replace: true });
   };
 
-  const handleAuthSuccess = async () => {
+  const handleAuthSuccess = async (sessionData?: Record<string, unknown>) => {
+    if (sessionData) {
+      queryClient.setQueryData(["session"], sessionData);
+    }
     await queryClient.invalidateQueries({ queryKey: ["session"] });
     await queryClient.invalidateQueries({ queryKey: ["llm-models"] });
     closeAuthModal();

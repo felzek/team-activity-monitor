@@ -16,7 +16,7 @@ interface Props {
   providerMessage: string | null;
   onClose: () => void;
   onModeChange: (mode: "login" | "register") => void;
-  onAuthenticated: () => Promise<void>;
+  onAuthenticated: (sessionData?: Record<string, unknown>) => Promise<void>;
 }
 
 type ProviderName = "github" | "jira" | "google";
@@ -199,13 +199,13 @@ export function AuthModal({
         body: JSON.stringify(payload),
       });
 
-      const result = (await response.json().catch(() => ({}))) as { error?: string };
+      const result = (await response.json().catch(() => ({}))) as Record<string, unknown> & { error?: string };
       if (!response.ok) {
         throw new Error(result.error ?? "Authentication failed.");
       }
 
       setStatus("Success. Opening your workspace...");
-      await onAuthenticated();
+      await onAuthenticated(result);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Authentication failed.");
     } finally {
