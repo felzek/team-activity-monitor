@@ -88,7 +88,7 @@ export function ChatInput({
           />
           <button
             className={`chat-send-btn${variant === "hero" ? " chat-send-btn--hero" : ""}`}
-            onClick={onSubmit}
+            onClick={() => onSubmit()}
             disabled={!value.trim() || disabled}
             aria-label="Send"
           >
