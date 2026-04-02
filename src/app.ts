@@ -350,6 +350,10 @@ async function getActiveProviderToken(
 export function createApp(config: AppConfig, logger: Logger, database: AppDatabase) {
   const app = express();
 
+  if (config.isVercel || config.secureCookies) {
+    app.set("trust proxy", 1);
+  }
+
   // Build the LLM service once so it's accessible to all routes (query + /api/llm/*)
   // OllamaAdapter is always registered — it returns empty list gracefully when not running.
   const llmRegistry = new LlmProviderRegistry()
@@ -368,6 +372,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     session({
       name: "tam_sid",
       secret: config.sessionSecret,
+      proxy: config.isVercel || config.secureCookies,
       resave: false,
       saveUninitialized: false,
       store: database.sessionStore,
