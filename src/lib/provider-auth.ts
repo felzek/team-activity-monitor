@@ -144,6 +144,7 @@ function buildGitHubAuthorizeUrl(config: AppConfig, flow: ProviderAuthFlowState)
   url.searchParams.set("redirect_uri", oauthCallbackUrl(config, "github"));
   url.searchParams.set("scope", config.githubOAuthScope.join(" "));
   url.searchParams.set("state", flow.state);
+
   if (flow.codeVerifier) {
     url.searchParams.set("code_challenge", sha256Base64Url(flow.codeVerifier));
     url.searchParams.set("code_challenge_method", "S256");
