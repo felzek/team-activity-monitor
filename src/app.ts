@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
+import cookieSession from "cookie-session";
 import express from "express";
 import session from "express-session";
 import type { Logger } from "pino";
@@ -546,22 +547,35 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   app.use(createHttpLogger());
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
-  app.use(
-    session({
-      name: "tam_sid",
-      secret: config.sessionSecret,
-      proxy: config.isVercel || config.secureCookies,
-      resave: false,
-      saveUninitialized: false,
-      store: database.sessionStore,
-      cookie: {
+  if (config.isVercel) {
+    app.use(
+      cookieSession({
+        name: "tam_sid",
+        keys: [config.sessionSecret],
         httpOnly: true,
         sameSite: "lax",
         secure: config.secureCookies,
         maxAge: 1000 * 60 * 60 * 24 * 7
-      }
-    })
-  );
+      })
+    );
+  } else {
+    app.use(
+      session({
+        name: "tam_sid",
+        secret: config.sessionSecret,
+        proxy: config.isVercel || config.secureCookies,
+        resave: false,
+        saveUninitialized: false,
+        store: database.sessionStore,
+        cookie: {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: config.secureCookies,
+          maxAge: 1000 * 60 * 60 * 24 * 7
+        }
+      })
+    );
+  }
   app.use(ensureCsrfToken);
   app.use(
     createRateLimitMiddleware({
@@ -1260,18 +1274,31 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   });
 
   app.post(["/api/auth/logout", "/api/v1/auth/logout"], (request, response) => {
-    request.session.destroy((error) => {
-      if (error) {
-        response.status(500).json({
-          error: "Could not sign out."
-        });
-        return;
-      }
+    const sessionWithDestroy = request.session as typeof request.session & {
+      destroy?: (callback: (error?: unknown) => void) => void;
+    };
 
-      response.clearCookie("tam_sid");
-      response.json({
-        authenticated: false
+    if (typeof sessionWithDestroy.destroy === "function") {
+      sessionWithDestroy.destroy((error) => {
+        if (error) {
+          response.status(500).json({
+            error: "Could not sign out."
+          });
+          return;
+        }
+
+        response.clearCookie("tam_sid");
+        response.json({
+          authenticated: false
+        });
       });
+      return;
+    }
+
+    (request as unknown as { session: null }).session = null;
+    response.clearCookie("tam_sid");
+    response.json({
+      authenticated: false
     });
   });
 

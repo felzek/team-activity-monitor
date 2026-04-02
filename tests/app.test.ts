@@ -588,6 +588,33 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
+  it("accepts the CSRF bootstrap flow for guest chat in Vercel mode", async () => {
+    const config = buildTestConfig({
+      VERCEL: "1"
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "vercel-guest-chat-csrf" }), database);
+    const agent = request.agent(app);
+
+    mockRepeatedLocalModelResponse();
+
+    const sessionResponse = await agent.get("/api/v1/auth/session");
+    const csrfToken = sessionResponse.body.csrfToken as string;
+
+    const response = await agent.post("/api/v1/chat").set("x-csrf-token", csrfToken).send({
+      message: "What is John working on this week?",
+      modelId: "local:qwen2.5:7b",
+      history: []
+    });
+
+    expect(sessionResponse.status).toBe(200);
+    expect(response.status).toBe(200);
+    expect(response.body.answer).toContain("Guest mode is working.");
+    expect(response.body.guestAccess.promptCount).toBe(1);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
   it("creates invitations and records audit events for owners", async () => {
     const { config, database, agent, organizationId } = await buildAuthenticatedAgent();
 
