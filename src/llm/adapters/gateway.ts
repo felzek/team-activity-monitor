@@ -91,6 +91,13 @@ function inferReasoningTier(modelId: string): "standard" | "extended" {
     : "standard";
 }
 
+function resolveRuntimeGatewayToken(
+  metadata: Record<string, unknown> | undefined
+): string | undefined {
+  const value = metadata?.gatewayToken;
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
 export class GatewayAdapter implements LlmProviderAdapter {
   readonly provider = "gateway" as const;
 
@@ -105,8 +112,9 @@ export class GatewayAdapter implements LlmProviderAdapter {
     >
   ) {}
 
-  async listModels(): Promise<NormalizedModel[]> {
-    if (!isGatewayConfigured(this.config)) {
+  async listModels(apiKey: string): Promise<NormalizedModel[]> {
+    const runtimeToken = apiKey.trim() || undefined;
+    if (!isGatewayConfigured(this.config, runtimeToken)) {
       return [];
     }
 
@@ -130,6 +138,7 @@ export class GatewayAdapter implements LlmProviderAdapter {
 
   async chat(_apiKey: string, request: NormalizedChatRequest): Promise<NormalizedChatResponse> {
     try {
+      const runtimeToken = resolveRuntimeGatewayToken(request.metadata);
       const body: Record<string, unknown> = {
         model: request.modelId,
         messages: toOpenAiMessages(request.messages),
@@ -154,7 +163,7 @@ export class GatewayAdapter implements LlmProviderAdapter {
       const response = (await gatewayFetch(this.config, "/chat/completions", {
         method: "POST",
         body: JSON.stringify(body),
-      })) as {
+      }, runtimeToken)) as {
         choices: Array<{
           message: {
             content: string | null;

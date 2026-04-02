@@ -22,6 +22,11 @@ const chatRequestSchema = z.object({
   maxOutputTokens: z.number().int().positive().max(32_768).optional(),
 });
 
+function readVercelOidcToken(request: express.Request): string | undefined {
+  const value = request.get("x-vercel-oidc-token");
+  return value && value.trim().length > 0 ? value.trim() : undefined;
+}
+
 export function createLlmRouter(service: LlmService, _logger: Logger): express.Router {
   const router = express.Router();
 
@@ -31,9 +36,10 @@ export function createLlmRouter(service: LlmService, _logger: Logger): express.R
    * sorted by provider priority then model sort order.
    */
   router.get("/models", async (request, response) => {
+    const gatewayToken = readVercelOidcToken(request);
     const models = request.session.userId
-      ? await service.listModels(request.session.userId)
-      : await service.listPublicModels();
+      ? await service.listModels(request.session.userId, gatewayToken)
+      : await service.listPublicModels(gatewayToken);
     response.json({ models });
   });
 
@@ -44,6 +50,7 @@ export function createLlmRouter(service: LlmService, _logger: Logger): express.R
    */
   router.post("/chat", requireAuth, requireCsrf, async (request, response) => {
     const userId = request.session.userId!;
+    const gatewayToken = readVercelOidcToken(request);
 
     const parsed = chatRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -53,7 +60,10 @@ export function createLlmRouter(service: LlmService, _logger: Logger): express.R
       );
     }
 
-    const chatResponse = await service.chat(userId, parsed.data);
+    const chatResponse = await service.chat(userId, {
+      ...parsed.data,
+      metadata: gatewayToken ? { gatewayToken } : undefined,
+    });
     response.json(chatResponse);
   });
 

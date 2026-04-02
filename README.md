@@ -116,7 +116,8 @@ Set these in Project Settings -> Environment Variables:
 | `SESSION_SECRET` | Yes | Must be a strong random secret |
 | `APP_BASE_URL` | Production strongly recommended | Set this to your production domain; previews can infer from `VERCEL_URL` |
 | `USE_RECORDED_FIXTURES` | Yes | `true` for demo mode, `false` for live Jira/GitHub traffic |
-| `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` | One required for hosted AI | Gateway auth |
+| `AI_GATEWAY_API_KEY` | Optional | Static Gateway auth for non-Vercel environments |
+| `VERCEL_OIDC_TOKEN` | Optional | Local Gateway auth after `vercel env pull` |
 | `AI_GATEWAY_DEFAULT_MODEL` | Recommended | Default hosted model slug |
 | `DEFAULT_MODEL_ID` | Recommended | Example: `gateway:alibaba/qwen-3-32b` |
 
@@ -143,6 +144,7 @@ If `USE_RECORDED_FIXTURES=false`, also set the live provider credentials you use
 - `DATABASE_PATH` defaults to `/tmp/team-activity-monitor.db` on Vercel
 - `BACKGROUND_WORKER_ENABLED` defaults to `false` on Vercel
 - cookies are marked `secure` automatically when `APP_BASE_URL` is HTTPS
+- deployed Vercel functions can authenticate AI Gateway with the platform OIDC request header
 - the app works in Preview and Production with the same entrypoint
 
 ## Vercel AI Gateway

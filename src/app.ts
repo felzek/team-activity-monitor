@@ -84,6 +84,11 @@ function buildGuestAccess(request: express.Request): GuestAccess {
   };
 }
 
+function readVercelOidcToken(request: express.Request): string | undefined {
+  const value = request.get("x-vercel-oidc-token");
+  return value && value.trim().length > 0 ? value.trim() : undefined;
+}
+
 function clearGuestSession(request: express.Request): void {
   request.session.demoOrganizationId = undefined;
   request.session.demoUserId = undefined;
@@ -1651,13 +1656,15 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         typeof request.body?.modelId === "string" ? request.body.modelId.trim() : "";
       // When no model is explicitly selected, use the configured default system model.
       const effectiveModelId = requestedModelId || executionConfig.defaultModelId;
+      const gatewayToken = readVercelOidcToken(request);
 
       const chatResp = await llmService.chat(request.session.userId!, {
         modelId: effectiveModelId,
         messages: [
           { role: "system", content: RESPONSE_SYSTEM_PROMPT },
           { role: "user", content: buildGroundedResponsePrompt(summary) }
-        ]
+        ],
+        metadata: gatewayToken ? { gatewayToken } : undefined
       });
       const responseText = chatResp.message.content;
       const modelUsed = effectiveModelId;
@@ -1855,6 +1862,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
 
       const orgSettings = database.getOrganizationSettings(organization.id);
       const executionConfig = { ...config, teamMembers: orgSettings.teamMembers, trackedRepos: orgSettings.trackedRepos };
+      const gatewayToken = readVercelOidcToken(request);
 
       // Reconstruct conversation history (user+assistant only — tool turns are internal)
       const history: NormalizedChatMessage[] = rawHistory.map((m) => ({
@@ -1878,6 +1886,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
               userId,
               organizationId: organization.id,
               modelId,
+              gatewayToken,
               timezone: config.appTimezone,
               teamMembers: orgSettings.teamMembers,
               config: previewConfig,
@@ -1923,6 +1932,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
           userId,
           organizationId: organization.id,
           modelId,
+          gatewayToken,
           timezone: config.appTimezone,
           githubToken: userGitHubToken,
           jiraToken: userJiraToken,

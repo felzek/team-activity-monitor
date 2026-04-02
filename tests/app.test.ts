@@ -669,6 +669,35 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
+  it("returns Gateway Qwen for guest model discovery with a Vercel runtime OIDC token", async () => {
+    const config = buildTestConfig({
+      VERCEL: "1",
+      AI_GATEWAY_MODELS: "alibaba/qwen-3-32b",
+      AI_GATEWAY_DEFAULT_MODEL: "alibaba/qwen-3-32b"
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-models-vercel-oidc" }), database);
+    const agent = request.agent(app);
+
+    const response = await agent
+      .get("/api/llm/models")
+      .set("x-vercel-oidc-token", "oidc-runtime-token");
+
+    expect(response.status).toBe(200);
+    expect(response.body.models).toEqual([
+      expect.objectContaining({
+        id: "gateway:alibaba/qwen-3-32b",
+        provider: "gateway",
+        displayName: "Qwen 3 32B",
+        isPinned: true,
+        isDefaultCandidate: true
+      })
+    ]);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
   it("uses the real chat pipeline for guests when Gateway Qwen is configured", async () => {
     const config = buildTestConfig({
       AI_GATEWAY_API_KEY: "agw_test_123",
@@ -686,6 +715,38 @@ describe("enterprise api routes", () => {
       modelId: "gateway:alibaba/qwen-3-32b",
       history: []
     });
+
+    expect(response.status).toBe(200);
+    expect(response.body.answer).toBe("Qwen says hello from the shared workspace.");
+    expect(Array.isArray(response.body.toolsUsed)).toBe(true);
+    expect(response.body.guestAccess.promptCount).toBe(1);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("uses the Vercel runtime OIDC token for guest Gateway chat", async () => {
+    const config = buildTestConfig({
+      VERCEL: "1",
+      AI_GATEWAY_MODELS: "alibaba/qwen-3-32b",
+      AI_GATEWAY_DEFAULT_MODEL: "alibaba/qwen-3-32b"
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-chat-gateway-vercel-oidc" }), database);
+    const agent = request.agent(app);
+
+    mockGatewayChatResponse();
+
+    const csrfToken = await getCsrf(agent);
+    const response = await agent
+      .post("/api/v1/chat")
+      .set("x-csrf-token", csrfToken)
+      .set("x-vercel-oidc-token", "oidc-runtime-token")
+      .send({
+        message: "What is John working on this week?",
+        modelId: "gateway:alibaba/qwen-3-32b",
+        history: []
+      });
 
     expect(response.status).toBe(200);
     expect(response.body.answer).toBe("Qwen says hello from the shared workspace.");

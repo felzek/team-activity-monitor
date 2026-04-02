@@ -36,6 +36,7 @@ export interface ChatTurnOptions {
   userId: string;
   organizationId: string;
   modelId: string;
+  gatewayToken?: string;
   timezone: string;
   githubToken?: string;
   jiraToken?: string;
@@ -141,7 +142,8 @@ export async function runChatTurn(
       messages,
       tools: ALL_TOOLS,
       maxOutputTokens: 2048,
-      temperature: 0.1 // Low temperature for factual grounding
+      temperature: 0.1, // Low temperature for factual grounding
+      metadata: opts.gatewayToken ? { gatewayToken: opts.gatewayToken } : undefined
     });
 
     totalInputTokens += response.usage.inputTokens;
@@ -242,7 +244,8 @@ export async function runChatTurn(
     modelId: opts.modelId,
     messages: finalMessages,
     maxOutputTokens: 2048,
-    temperature: 0.1
+    temperature: 0.1,
+    metadata: opts.gatewayToken ? { gatewayToken: opts.gatewayToken } : undefined
   });
 
   totalInputTokens += finalResponse.usage.inputTokens;

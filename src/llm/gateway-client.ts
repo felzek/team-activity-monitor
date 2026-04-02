@@ -8,20 +8,27 @@ type GatewayConfig = Pick<
   "aiGatewayApiKey" | "vercelOidcToken" | "aiGatewayBaseUrl"
 >;
 
-function resolveGatewayToken(config: GatewayConfig): string | null {
-  return config.aiGatewayApiKey ?? config.vercelOidcToken ?? null;
+function resolveGatewayToken(
+  config: GatewayConfig,
+  runtimeToken?: string
+): string | null {
+  return config.aiGatewayApiKey ?? runtimeToken ?? config.vercelOidcToken ?? null;
 }
 
-export function isGatewayConfigured(config: GatewayConfig): boolean {
-  return Boolean(resolveGatewayToken(config));
+export function isGatewayConfigured(
+  config: GatewayConfig,
+  runtimeToken?: string
+): boolean {
+  return Boolean(resolveGatewayToken(config, runtimeToken));
 }
 
 export async function gatewayFetch(
   config: GatewayConfig,
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  runtimeToken?: string
 ): Promise<unknown> {
-  const token = resolveGatewayToken(config);
+  const token = resolveGatewayToken(config, runtimeToken);
   if (!token) {
     throw new LlmError(
       "Vercel AI Gateway is not configured. Set AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN.",

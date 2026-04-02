@@ -74,13 +74,13 @@ export class LlmService {
     });
   }
 
-  private async listGatewayModels(): Promise<NormalizedModel[]> {
+  private async listGatewayModels(gatewayToken?: string): Promise<NormalizedModel[]> {
     if (!this.registry.hasAdapter("gateway")) {
       return [];
     }
 
     try {
-      return await this.registry.getAdapter("gateway").listModels("");
+      return await this.registry.getAdapter("gateway").listModels(gatewayToken ?? "");
     } catch (err) {
       this.logger.warn({ provider: "gateway", err }, "Model listing failed for provider");
       return [];
@@ -104,10 +104,10 @@ export class LlmService {
    * Cloud providers use API keys from the DB; local Ollama does not need a key.
    * Providers that fail to respond are silently omitted (logged as warnings).
    */
-  async listModels(userId: string): Promise<NormalizedModel[]> {
+  async listModels(userId: string, gatewayToken?: string): Promise<NormalizedModel[]> {
     const models: NormalizedModel[] = [];
 
-    models.push(...(await this.listGatewayModels()));
+    models.push(...(await this.listGatewayModels(gatewayToken)));
 
     const keyedProviders = new Set<KeyedProvider>();
     for (const keyRecord of this.database.listLlmProviderKeys(userId)) {
@@ -138,8 +138,8 @@ export class LlmService {
     return this.sortModels(models);
   }
 
-  async listPublicModels(): Promise<NormalizedModel[]> {
-    const gatewayModels = await this.listGatewayModels();
+  async listPublicModels(gatewayToken?: string): Promise<NormalizedModel[]> {
+    const gatewayModels = await this.listGatewayModels(gatewayToken);
     if (gatewayModels.length > 0) {
       return this.sortModels(gatewayModels);
     }
