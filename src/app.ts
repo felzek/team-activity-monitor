@@ -464,21 +464,28 @@ function providerResultPath(
   returnTo?: string
 ): string {
   const safeReturnTo = normalizeReturnTo(returnTo);
-  const basePath = status === "connected" || entry === "connect" ? safeReturnTo : "/app";
-  const search = new URLSearchParams({
-    provider_auth: status,
-    provider
-  });
+  const target = new URL(
+    status === "connected" || entry === "connect" ? safeReturnTo : "/app",
+    "https://team-assist.local"
+  );
+
+  target.searchParams.delete("auth");
+  target.searchParams.delete("provider_auth");
+  target.searchParams.delete("provider");
+  target.searchParams.delete("message");
+
+  target.searchParams.set("provider_auth", status);
+  target.searchParams.set("provider", provider);
 
   if (entry === "login" && status === "error") {
-    search.set("auth", "login");
+    target.searchParams.set("auth", "login");
   }
 
   if (message) {
-    search.set("message", message);
+    target.searchParams.set("message", message);
   }
 
-  return `${basePath}?${search.toString()}`;
+  return `${target.pathname}${target.search}${target.hash}`;
 }
 
 // 5-minute buffer: refresh before actual expiry to avoid mid-request failures
@@ -548,35 +555,22 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   app.use(createHttpLogger());
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true }));
-  if (config.isVercel) {
-    app.use(
-      cookieSession({
-        name: "tam_sid",
-        keys: [config.sessionSecret],
+  app.use(
+    session({
+      name: "tam_sid",
+      secret: config.sessionSecret,
+      resave: false,
+      saveUninitialized: false,
+      store: database.sessionStore,
+      proxy: true,
+      cookie: {
         httpOnly: true,
         sameSite: "lax",
         secure: config.secureCookies,
-        maxAge: 1000 * 60 * 60 * 24 * 7
-      })
-    );
-  } else {
-    app.use(
-      session({
-        name: "tam_sid",
-        secret: config.sessionSecret,
-        proxy: config.isVercel || config.secureCookies,
-        resave: false,
-        saveUninitialized: false,
-        store: database.sessionStore,
-        cookie: {
-          httpOnly: true,
-          sameSite: "lax",
-          secure: config.secureCookies,
-          maxAge: 1000 * 60 * 60 * 24 * 7
-        }
-      })
-    );
-  }
+        maxAge: 1000 * 60 * 60 * 24 * 30 // 30 days
+      }
+    })
+  );
   app.use(ensureCsrfToken);
   app.use(
     createRateLimitMiddleware({
@@ -865,13 +859,9 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         }
 
         if (existingLink && existingLink.userId !== user.id) {
-          throw new AppError(
-            "That provider account is already linked to another workspace user.",
-            {
-              code: "PROVIDER_ACCOUNT_ALREADY_LINKED",
-              statusCode: 409
-            }
-          );
+          // Relink the provider account to the current user.
+          // This allows "identity migration" if the user has multiple accounts.
+          database.disconnectUserProviderConnection(existingLink.userId, provider);
         }
 
         request.session.userId = user.id;
@@ -881,13 +871,17 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         );
         clearGuestSession(request);
       } else {
-        if (existingLink) {
-          user = database.findUserById(existingLink.userId);
-        }
+      if (request.session.userId) {
+        user = database.findUserById(request.session.userId);
+      }
 
-        if (!user && identity.email) {
-          user = database.findUserByEmail(identity.email);
-        }
+      if (!user && existingLink) {
+        user = database.findUserById(existingLink.userId);
+      }
+
+      if (!user && identity.email) {
+        user = database.findUserByEmail(identity.email);
+      }
 
         if (!user) {
           if (!identity.email) {
@@ -1654,9 +1648,10 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
   app.post(
     ["/api/query", "/api/v1/orgs/:orgId/query"],
     requireAuth,
-    requireProviderConnections(database, ["github", "jira"], (providerAuth) =>
-      applyProviderAuthRuntime(config, providerAuth)
-    ),
+    requireProviderConnections(database, ["github", "jira"], (pa) => {
+      pa.allConnected = !!(pa.github?.status === "connected" || pa.jira?.status === "connected");
+      return pa;
+    }),
     async (request, response) => {
       const snapshot = buildSessionSnapshot(request, database, config);
       const organization =

@@ -361,6 +361,38 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
+  it("merges provider auth params into a returnTo that already has a query string", async () => {
+    const config = buildTestConfig({
+      GITHUB_OAUTH_CLIENT_ID: "github-client-id",
+      GITHUB_OAUTH_CLIENT_SECRET: "github-client-secret"
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "github-oauth-return-to-query" }), database);
+    const agent = request.agent(app);
+
+    const startResponse = await agent.get("/api/v1/auth/providers/github/start?returnTo=/app?auth=login");
+    const state = extractQueryParam(startResponse.headers.location, "state");
+    expect(startResponse.status).toBe(302);
+    expect(state).toBeTruthy();
+
+    mockGitHubOAuthResponses({
+      email: "query-return@example.com",
+      login: "query-return-user",
+      name: "Query Return User"
+    });
+
+    const callbackResponse = await agent.get(
+      `/api/v1/auth/providers/github/callback?code=test-code&state=${state}`
+    );
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.location).toContain("/app?provider_auth=connected&provider=github");
+    expect(callbackResponse.headers.location).not.toContain("auth=login?");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
   it("signs an existing user in through OAuth without requiring a password", async () => {
     const config = buildTestConfig(ALL_OAUTH_CREDS);
     const database = initializeDatabase(config);

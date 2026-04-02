@@ -38,10 +38,10 @@ export interface LocalLlmChatMessage {
 }
 
 /**
- * Response shape for an Ollama-compatible POST …/chat endpoint.
- * Many local runtimes (Ollama, some proxies) use this JSON contract.
+ * Response envelope from a local HTTP `…/chat` endpoint (Ollama-style JSON).
+ * Many local runtimes (Ollama, LM Studio, proxies) use this contract.
  */
-export interface OllamaCompatibleChatResponse {
+export interface LocalLlmHttpChatResponse {
   message?: {
     role?: string;
     content?: string;
@@ -63,7 +63,7 @@ function joinLocalLlmUrl(baseUrl: string, pathSegment: string): string {
   return `${base}/${path}`;
 }
 
-function buildOllamaCompatibleChatBody(
+function buildLocalLlmHttpChatBody(
   config: AppConfig,
   modelName: string,
   messages: LocalLlmChatMessage[]
@@ -76,7 +76,7 @@ function buildOllamaCompatibleChatBody(
   };
 }
 
-function extractAssistantText(payload: OllamaCompatibleChatResponse): string | null {
+function extractAssistantText(payload: LocalLlmHttpChatResponse): string | null {
   const text = payload.message?.content?.trim();
   return text || null;
 }
@@ -116,10 +116,10 @@ function localModelNotReadyMessage(modelName: string, endpointHint: string): str
 }
 
 /**
- * POST to an Ollama-compatible `/chat` endpoint and return the assistant message text.
- * `config.ollamaBaseUrl` is treated as the API base (e.g. `http://localhost:11434/api`).
+ * POST to the local HTTP `…/chat` endpoint and return the assistant message text.
+ * `config.ollamaBaseUrl` is the API base (e.g. `http://localhost:11434/api` for Ollama).
  */
-export async function postOllamaCompatibleChat(
+export async function postLocalLlmHttpChat(
   config: AppConfig,
   modelName: string,
   messages: LocalLlmChatMessage[],
@@ -133,10 +133,10 @@ export async function postOllamaCompatibleChat(
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(buildOllamaCompatibleChatBody(config, modelName, messages))
+      body: JSON.stringify(buildLocalLlmHttpChatBody(config, modelName, messages))
     });
 
-    const payload = (await response.json().catch(() => ({}))) as OllamaCompatibleChatResponse;
+    const payload = (await response.json().catch(() => ({}))) as LocalLlmHttpChatResponse;
 
     if (!response.ok) {
       throw new AppError(
@@ -172,7 +172,7 @@ export async function postOllamaCompatibleChat(
         promptEvalCount: payload.prompt_eval_count,
         evalCount: payload.eval_count
       },
-      "Generated grounded response via local HTTP LLM (Ollama-compatible chat API)"
+      "Generated grounded response via local HTTP LLM chat API"
     );
 
     return content;
@@ -286,7 +286,7 @@ export async function generateSystemText(
   ];
 
   if (provider === "local") {
-    return postOllamaCompatibleChat(config, providerModelId, messages, logger);
+    return postLocalLlmHttpChat(config, providerModelId, messages, logger);
   }
 
   if (provider === "gateway") {
