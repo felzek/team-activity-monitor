@@ -871,17 +871,20 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         );
         clearGuestSession(request);
       } else {
-      if (request.session.userId) {
-        user = database.findUserById(request.session.userId);
-      }
+        if (request.session.userId) {
+          user = database.findUserById(request.session.userId);
+          if (existingLink && existingLink.userId !== request.session.userId) {
+            database.disconnectUserProviderConnection(existingLink.userId, provider);
+          }
+        }
 
-      if (!user && existingLink) {
-        user = database.findUserById(existingLink.userId);
-      }
+        if (!user && existingLink) {
+          user = database.findUserById(existingLink.userId);
+        }
 
-      if (!user && identity.email) {
-        user = database.findUserByEmail(identity.email);
-      }
+        if (!user && identity.email) {
+          user = database.findUserByEmail(identity.email);
+        }
 
         if (!user) {
           if (!identity.email) {
