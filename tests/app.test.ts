@@ -126,6 +126,28 @@ function mockRepeatedLocalModelResponse(
   );
 }
 
+function mockGatewayChatResponse(
+  responseText = "Qwen says hello from the shared workspace."
+) {
+  vi.restoreAllMocks();
+  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    jsonResponse({
+      choices: [
+        {
+          message: {
+            content: responseText
+          }
+        }
+      ],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 12,
+        total_tokens: 22
+      }
+    })
+  );
+}
+
 async function getCsrf(agent: ReturnType<typeof request.agent>) {
   const response = await agent.get("/api/v1/auth/session");
   return response.body.csrfToken as string;
@@ -583,6 +605,57 @@ describe("enterprise api routes", () => {
     expect(blockedResponse.body.code).toBe("GUEST_AUTH_REQUIRED");
     expect(blockedResponse.body.guestAccess.promptCount).toBe(5);
     expect(blockedResponse.body.guestAccess.authRequired).toBe(true);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("returns pinned Gateway Qwen for guest model discovery", async () => {
+    const config = buildTestConfig({
+      AI_GATEWAY_API_KEY: "agw_test_123",
+      AI_GATEWAY_MODELS: "alibaba/qwen3.5-flash",
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-models" }), database);
+    const agent = request.agent(app);
+
+    const response = await agent.get("/api/llm/models");
+
+    expect(response.status).toBe(200);
+    expect(response.body.models).toEqual([
+      expect.objectContaining({
+        id: "gateway:alibaba/qwen3.5-flash",
+        provider: "gateway",
+        isPinned: true,
+        isDefaultCandidate: true,
+      }),
+    ]);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("uses the real chat pipeline for guests when Gateway is configured", async () => {
+    const config = buildTestConfig({
+      AI_GATEWAY_API_KEY: "agw_test_123",
+      AI_GATEWAY_MODELS: "alibaba/qwen3.5-flash",
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-chat-gateway" }), database);
+    const agent = request.agent(app);
+
+    mockGatewayChatResponse();
+
+    const response = await postWithCsrf(agent, "/api/v1/chat", {
+      message: "What is John working on this week?",
+      modelId: "gateway:alibaba/qwen3.5-flash",
+      history: []
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.answer).toBe("Qwen says hello from the shared workspace.");
+    expect(response.body.toolsUsed.length).toBeGreaterThan(0);
+    expect(response.body.guestAccess.promptCount).toBe(1);
 
     database.close();
     cleanupTestConfig(config);

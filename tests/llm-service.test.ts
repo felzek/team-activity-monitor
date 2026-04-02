@@ -117,6 +117,27 @@ describe("LlmService.listModels", () => {
     expect(models[0].provider).toBe("gateway");
   });
 
+  it("returns locked BYOK provider entries when no user key is saved", async () => {
+    const db = makeDb({});
+    const registry = new LlmProviderRegistry()
+      .register(makeAdapter("gateway", [model("gateway", "alibaba/qwen3.5-flash")]));
+    const service = new LlmService(registry, db as never, logger);
+    const models = await service.listModels("user1");
+
+    expect(models.map((entry) => entry.id)).toEqual([
+      "gateway:alibaba/qwen3.5-flash",
+      "claude:claude-sonnet-4-6-20251022",
+      "openai:gpt-5.4",
+      "gemini:models/gemini-2.0-flash-001",
+    ]);
+    expect(models[1]?.status).toBe("unavailable");
+    expect(models[1]).toMatchObject({ provider: "claude" });
+    expect(models[2]?.status).toBe("unavailable");
+    expect(models[2]).toMatchObject({ provider: "openai" });
+    expect(models[3]?.status).toBe("unavailable");
+    expect(models[3]).toMatchObject({ provider: "gemini" });
+  });
+
   it("includes fallback server-backed models when no personal key is saved", async () => {
     const db = makeDb({});
     const registry = new LlmProviderRegistry().register(
@@ -342,6 +363,29 @@ describe("LlmService.chat", () => {
     await expect(service.chat("user1", request)).rejects.toMatchObject({
       llmCode: "authentication_error",
       provider: "openai",
+    });
+  });
+});
+
+describe("LlmService.listPublicModels", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("returns the pinned gateway default instead of the guest preview model", async () => {
+    const db = makeDb({});
+    const registry = new LlmProviderRegistry().register(
+      makeAdapter("gateway", [model("gateway", "alibaba/qwen3.5-flash")])
+    );
+    const service = new LlmService(registry, db as never, logger);
+
+    const models = await service.listPublicModels();
+
+    expect(models).toHaveLength(1);
+    expect(models[0]).toMatchObject({
+      id: "gateway:alibaba/qwen3.5-flash",
+      provider: "gateway",
+      status: "available",
+      isPinned: true,
+      isDefaultCandidate: true,
     });
   });
 });
