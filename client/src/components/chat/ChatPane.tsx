@@ -45,6 +45,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [selectedAction, setSelectedAction] = useState<ArtifactQuickAction | null>(null);
   const [focusToken, setFocusToken] = useState(0);
+  const [chatStarted, setChatStarted] = useState(false);
   const currentConvRef = useRef<string | null>(null);
 
   const { data: models } = useModels();
@@ -100,12 +101,14 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
       setHistory([]);
       setChatTitle("New chat");
       setSelectedAction(null);
+      setChatStarted(false);
       return;
     }
 
     const conv = conversations.find((c) => c.id === conversationId);
     if (conv) setChatTitle(conv.title);
 
+    setChatStarted(false);
     setLoadingMessages(true);
     loadMessages(conversationId)
       .then((data) => {
@@ -173,6 +176,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
 
     setInput("");
     setSelectedAction(null);
+    setChatStarted(true);
 
     const userMsgId = uid();
     const thinkingId = uid();
@@ -286,7 +290,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     setFocusToken((token) => token + 1);
   }, [guestWorkspace, requestAuth]);
 
-  const showWelcomeState = !loadingMessages && messages.length === 0;
+  const showWelcomeState = !chatStarted && !loadingMessages && messages.length === 0;
   const guestHelperText = !authenticated && guestAccess
     ? "The sample workspace is unlocked for prompting only."
     : "Grounded in your connected workspace data.";
