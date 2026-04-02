@@ -1,4 +1,4 @@
-import { bootstrapAppRuntime } from "./src/runtime.js";
+import { bootstrapAppRuntime } from "../src/runtime.js";
 
 const { app } = bootstrapAppRuntime();
 
