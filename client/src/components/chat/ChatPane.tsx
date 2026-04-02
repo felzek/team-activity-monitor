@@ -151,16 +151,6 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     setInput(value);
   }, []);
 
-  const handleActionSelect = useCallback((action: ArtifactQuickAction) => {
-    if (guestWorkspace) {
-      requestAuth();
-      return;
-    }
-    setSelectedAction(null);
-    setInput("");
-    void sendMessage(action.prompt, action);
-  }, [guestWorkspace, requestAuth, sendMessage]);
-
   const handleSuggestionSelect = useCallback((text: string) => {
     if (guestWorkspace) {
       requestAuth();
@@ -284,6 +274,16 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     setGuestAccess,
     updateConversation,
   ]);
+
+  const handleActionSelect = useCallback((action: ArtifactQuickAction) => {
+    if (guestWorkspace) {
+      requestAuth();
+      return;
+    }
+    setSelectedAction(null);
+    setInput("");
+    void sendMessage(action.prompt, action);
+  }, [guestWorkspace, requestAuth, sendMessage]);
 
   const showWelcomeState = !loadingMessages && messages.length === 0;
   const guestHelperText = !authenticated && guestAccess
