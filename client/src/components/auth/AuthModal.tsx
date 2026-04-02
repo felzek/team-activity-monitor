@@ -164,7 +164,8 @@ export function AuthModal({
       return;
     }
 
-    window.location.href = `/api/v1/auth/providers/${provider}/start`;
+    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}` || "/app";
+    window.location.href = `/api/v1/auth/providers/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`;
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

@@ -12,6 +12,9 @@ import type {
   PublicUser
 } from "./types/auth.js";
 
+const AUTH_REDIRECT_FALLBACK = "/app";
+const AUTH_ROUTE_PREFIXES = ["/login", "/register"];
+
 export function validateRegistrationInput(input: {
   name?: string;
   email?: string;
@@ -221,6 +224,24 @@ export function requireAuthPage(
   }
 
   next();
+}
+
+export function normalizeReturnTo(value: unknown, fallback = AUTH_REDIRECT_FALLBACK): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return fallback;
+  }
+
+  try {
+    const parsed = new URL(raw, "https://team-assist.local");
+    const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    if (AUTH_ROUTE_PREFIXES.some((prefix) => parsed.pathname.startsWith(prefix))) {
+      return fallback;
+    }
+    return normalized;
+  } catch {
+    return fallback;
+  }
 }
 
 export function redirectAuthenticatedPage(

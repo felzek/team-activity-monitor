@@ -330,6 +330,37 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
+  it("preserves returnTo through GitHub OAuth sign-in", async () => {
+    const config = buildTestConfig({
+      GITHUB_OAUTH_CLIENT_ID: "github-client-id",
+      GITHUB_OAUTH_CLIENT_SECRET: "github-client-secret"
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "github-oauth-return-to" }), database);
+    const agent = request.agent(app);
+
+    const startResponse = await agent.get("/api/v1/auth/providers/github/start?returnTo=/settings");
+    const state = extractQueryParam(startResponse.headers.location, "state");
+    expect(startResponse.status).toBe(302);
+    expect(state).toBeTruthy();
+
+    mockGitHubOAuthResponses({
+      email: "return-to@example.com",
+      login: "return-to-user",
+      name: "Return To User"
+    });
+
+    const callbackResponse = await agent.get(
+      `/api/v1/auth/providers/github/callback?code=test-code&state=${state}`
+    );
+
+    expect(callbackResponse.status).toBe(302);
+    expect(callbackResponse.headers.location).toContain("/settings?provider_auth=connected&provider=github");
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
   it("signs an existing user in through OAuth without requiring a password", async () => {
     const config = buildTestConfig(ALL_OAUTH_CREDS);
     const database = initializeDatabase(config);
@@ -533,17 +564,17 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
-  it("redirects login to the guest workspace and keeps invite registration in-app", async () => {
+  it("redirects login into GitHub OAuth and keeps invite registration in-app", async () => {
     const config = buildTestConfig();
     const database = initializeDatabase(config);
     const app = createApp(config, logger.child({ test: "auth-modal-redirect" }), database);
     const agent = request.agent(app);
 
-    const loginResponse = await agent.get("/login");
+    const loginResponse = await agent.get("/login?returnTo=/settings");
     const registerResponse = await agent.get("/register?invite=test-token");
 
     expect(loginResponse.status).toBe(302);
-    expect(loginResponse.headers.location).toBe("/app");
+    expect(loginResponse.headers.location).toBe("/api/v1/auth/providers/github/start?returnTo=%2Fsettings");
     expect(registerResponse.status).toBe(302);
     expect(registerResponse.headers.location).toBe("/app?auth=register&invite=test-token");
 

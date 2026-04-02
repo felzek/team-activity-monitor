@@ -10,6 +10,7 @@ import { z } from "zod";
 import {
   ensureCsrfToken,
   hashPassword,
+  normalizeReturnTo,
   requireAuth,
   requireAuthPage,
   requireCsrf,
@@ -70,6 +71,11 @@ const GUEST_PROMPT_LIMIT = 5;
 
 function sendPublicFile(response: express.Response, fileName: string): void {
   response.sendFile(fileName, { root: PUBLIC_DIR });
+}
+
+function buildGitHubLoginPath(returnTo: unknown = "/app"): string {
+  const safeReturnTo = normalizeReturnTo(returnTo);
+  return `/api/v1/auth/providers/github/start?returnTo=${encodeURIComponent(safeReturnTo)}`;
 }
 
 function buildGuestAccess(request: express.Request): GuestAccess {
@@ -461,9 +467,11 @@ function providerResultPath(
   entry: "login" | "connect",
   provider: ProviderAuthProvider,
   status: "connected" | "error",
-  message?: string
+  message?: string,
+  returnTo?: string
 ): string {
-  const basePath = "/app";
+  const safeReturnTo = normalizeReturnTo(returnTo);
+  const basePath = status === "connected" || entry === "connect" ? safeReturnTo : "/app";
   const search = new URLSearchParams({
     provider_auth: status,
     provider
@@ -596,8 +604,8 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     sendPublicFile(response, "index.html");
   });
 
-  app.get("/login", (_request, response) => {
-    response.redirect("/app");
+  app.get("/login", (request, response) => {
+    response.redirect(buildGitHubLoginPath(request.query.returnTo));
   });
 
   app.get("/register", (request, response) => {
@@ -772,10 +780,12 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
       }
 
       const entry = request.session.userId ? "connect" : "login";
+      const returnTo = normalizeReturnTo(request.query.returnTo);
       const flow = buildProviderAuthFlowState(
         provider,
         entry,
-        request.session.userId ?? null
+        request.session.userId ?? null,
+        returnTo
       );
 
       request.session.providerAuthFlows ??= {};
@@ -784,7 +794,15 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Provider sign-in could not be started.";
-      response.redirect(providerResultPath(request.session.userId ? "connect" : "login", provider, "error", message));
+      response.redirect(
+        providerResultPath(
+          request.session.userId ? "connect" : "login",
+          provider,
+          "error",
+          message,
+          request.query.returnTo as string | undefined
+        )
+      );
     }
   });
 
@@ -803,7 +821,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
         delete request.session.providerAuthFlows[provider];
       }
 
-      response.redirect(providerResultPath(entry, provider, "error", message));
+      response.redirect(providerResultPath(entry, provider, "error", message, flow?.returnTo));
     };
 
     if (!flow) {
@@ -1008,7 +1026,8 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
           flow.entry,
           provider,
           "connected",
-          createdAccount ? "Account created and provider connected." : undefined
+          createdAccount ? "Account created and provider connected." : undefined,
+          flow.returnTo
         )
       );
     } catch (error) {

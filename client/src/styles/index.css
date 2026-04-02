@@ -2055,8 +2055,122 @@ button {
   overflow: hidden;
 }
 
+.workspace-connection-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 16px 16px 0;
+  padding: 18px 20px;
+  border: 1px solid rgba(91, 94, 244, 0.14);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(247, 248, 255, 0.94));
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
+}
+
+.workspace-connection-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-connection-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.workspace-connection-title {
+  font-size: 1rem;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.workspace-connection-description {
+  max-width: 720px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.workspace-connection-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspace-connection-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.workspace-connection-pill--missing {
+  background: rgba(91, 94, 244, 0.1);
+  color: var(--accent);
+}
+
+.workspace-connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.workspace-connection-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+}
+
+.workspace-connection-action:hover {
+  transform: translateY(-1px);
+}
+
+.workspace-connection-action--primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(91, 94, 244, 0.2);
+}
+
+.workspace-connection-action--primary:hover {
+  background: var(--accent-hover);
+}
+
+.workspace-connection-action--secondary {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text);
+}
+
 /* ── Mobile sidebar ── */
 @media (max-width: 768px) {
+  .workspace-connection-banner {
+    flex-direction: column;
+    margin: 12px 12px 0;
+    padding: 16px;
+  }
+  .workspace-connection-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
   .history-sidebar {
     position: fixed;
     top: 0;

@@ -94,6 +94,7 @@ export interface UserProviderConnection {
 export interface ProviderAuthFlowState {
   provider: ProviderAuthProvider;
   entry: ProviderAuthFlowEntry;
+  returnTo: string;
   state: string;
   startedAt: string;
   startedByUserId: string | null;

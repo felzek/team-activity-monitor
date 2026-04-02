@@ -582,11 +582,13 @@ export function applyProviderAuthRuntime(
 export function buildProviderAuthFlowState(
   provider: ProviderAuthProvider,
   entry: ProviderAuthFlowEntry,
-  startedByUserId: string | null
+  startedByUserId: string | null,
+  returnTo: string
 ): ProviderAuthFlowState {
   return {
     provider,
     entry,
+    returnTo,
     state: randomUUID(),
     startedAt: new Date().toISOString(),
     startedByUserId,

@@ -22,6 +22,8 @@ export interface SessionResponse {
     savedAt: string;
   }>;
   providerAuth: {
+    allConnected: boolean;
+    missingProviders: Array<"github" | "jira" | "google">;
     providerModes: Record<"github" | "jira" | "google", "oauth" | "unavailable">;
   };
 }
