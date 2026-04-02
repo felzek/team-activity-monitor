@@ -280,10 +280,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
       requestAuth();
       return;
     }
-    setSelectedAction(null);
-    setInput("");
-    void sendMessage(action.prompt, action);
-  }, [guestWorkspace, requestAuth, sendMessage]);
+    setSelectedAction(action);
+    setInput(action.prompt);
+    setFocusToken((token) => token + 1);
+  }, [guestWorkspace, requestAuth]);
 
   const showWelcomeState = !loadingMessages && messages.length === 0;
   const guestHelperText = !authenticated && guestAccess
