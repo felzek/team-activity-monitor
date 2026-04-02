@@ -1,10 +1,36 @@
 import { useModels } from "@/hooks/useModels";
+import type { LlmModel } from "@/api/types";
 
 interface Props {
   value: string;
   onChange: (id: string) => void;
   locked?: boolean;
   onLockedClick?: () => void;
+}
+
+function providerLabel(provider: LlmModel["provider"]): string {
+  switch (provider) {
+    case "openai":
+      return "OpenAI";
+    case "claude":
+      return "Claude";
+    case "gemini":
+      return "Gemini";
+    case "gateway":
+      return "AI Gateway";
+    case "local":
+      return "Local";
+    default:
+      return provider;
+  }
+}
+
+function optionLabel(model: LlmModel, duplicateNames: Set<string>): string {
+  if (!duplicateNames.has(model.displayName)) {
+    return model.displayName;
+  }
+
+  return `${model.displayName} (${providerLabel(model.provider)})`;
 }
 
 export function ModelSelector({ value, onChange, locked = false, onLockedClick }: Props) {
@@ -20,6 +46,11 @@ export function ModelSelector({ value, onChange, locked = false, onLockedClick }
 
   const toolModels = models?.filter((m) => m.supportsTools) ?? [];
   const displayModels = toolModels.length > 0 ? toolModels : (models ?? []);
+  const duplicateNames = new Set(
+    displayModels
+      .map((model) => model.displayName)
+      .filter((name, index, all) => all.indexOf(name) !== index)
+  );
 
   if (displayModels.length === 0) {
     return (
@@ -54,7 +85,7 @@ export function ModelSelector({ value, onChange, locked = false, onLockedClick }
     >
       {displayModels.map((m) => (
         <option key={m.id} value={m.id}>
-          {m.displayName} ({m.provider})
+          {optionLabel(m, duplicateNames)}
         </option>
       ))}
     </select>
