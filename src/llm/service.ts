@@ -74,6 +74,31 @@ export class LlmService {
     });
   }
 
+  private async listGatewayModels(): Promise<NormalizedModel[]> {
+    if (!this.registry.hasAdapter("gateway")) {
+      return [];
+    }
+
+    try {
+      return await this.registry.getAdapter("gateway").listModels("");
+    } catch (err) {
+      this.logger.warn({ provider: "gateway", err }, "Model listing failed for provider");
+      return [];
+    }
+  }
+
+  private async listLocalModels(): Promise<NormalizedModel[]> {
+    if (!this.registry.hasAdapter("local")) {
+      return [];
+    }
+
+    try {
+      return await this.registry.getAdapter("local").listModels("");
+    } catch {
+      return [];
+    }
+  }
+
   /**
    * Aggregate chat-capable models from all connected providers for this user.
    * Cloud providers use API keys from the DB; local Ollama does not need a key.
@@ -82,13 +107,7 @@ export class LlmService {
   async listModels(userId: string): Promise<NormalizedModel[]> {
     const models: NormalizedModel[] = [];
 
-    if (this.registry.hasAdapter("gateway")) {
-      try {
-        models.push(...(await this.registry.getAdapter("gateway").listModels("")));
-      } catch (err) {
-        this.logger.warn({ provider: "gateway", err }, "Model listing failed for provider");
-      }
-    }
+    models.push(...(await this.listGatewayModels()));
 
     const keyedProviders = new Set<KeyedProvider>();
     for (const keyRecord of this.database.listLlmProviderKeys(userId)) {
@@ -114,20 +133,22 @@ export class LlmService {
       ))
     );
 
-    // Local Ollama does not require a stored API key — always attempt to list
-    if (this.registry.hasAdapter("local")) {
-      try {
-        const localModels = await this.registry.getAdapter("local").listModels("");
-        models.push(...localModels);
-      } catch {
-        // Ollama not running — omit local models silently
-      }
-    }
+    models.push(...(await this.listLocalModels()));
 
     return this.sortModels(models);
   }
 
   async listPublicModels(): Promise<NormalizedModel[]> {
+    const gatewayModels = await this.listGatewayModels();
+    if (gatewayModels.length > 0) {
+      return this.sortModels(gatewayModels);
+    }
+
+    const localModels = await this.listLocalModels();
+    if (localModels.length > 0) {
+      return this.sortModels(localModels);
+    }
+
     return [
       {
         id: "local:guest-preview",

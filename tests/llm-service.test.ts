@@ -109,7 +109,7 @@ describe("LlmService.listModels", () => {
   it("includes Vercel AI Gateway models without requiring a stored user key", async () => {
     const db = makeDb({});
     const registry = new LlmProviderRegistry().register(
-      makeAdapter("gateway", [model("gateway", "alibaba/qwen3.5-flash")])
+      makeAdapter("gateway", [model("gateway", "alibaba/qwen-3-32b")])
     );
     const service = new LlmService(registry, db as never, logger);
     const models = await service.listModels("user1");
@@ -283,7 +283,7 @@ describe("LlmService.chat", () => {
     const db = makeDb({});
     const chatSpy = vi.fn().mockResolvedValue({
       provider: "gateway",
-      modelId: "alibaba/qwen3.5-flash",
+      modelId: "alibaba/qwen-3-32b",
       message: { role: "assistant", content: "hi" },
       usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
       finishReason: "stop",
@@ -296,13 +296,13 @@ describe("LlmService.chat", () => {
     });
     const service = new LlmService(registry, db as never, logger);
     const resp = await service.chat("user1", {
-      modelId: "gateway:alibaba/qwen3.5-flash",
+      modelId: "gateway:alibaba/qwen-3-32b",
       messages: [{ role: "user", content: "Hello" }],
     });
 
     expect(chatSpy).toHaveBeenCalledOnce();
-    expect(chatSpy.mock.calls[0]![1].modelId).toBe("alibaba/qwen3.5-flash");
-    expect(resp.modelId).toBe("gateway:alibaba/qwen3.5-flash");
+    expect(chatSpy.mock.calls[0]![1].modelId).toBe("alibaba/qwen-3-32b");
+    expect(resp.modelId).toBe("gateway:alibaba/qwen-3-32b");
   });
 
   it("throws configuration_error if no API key is configured", async () => {

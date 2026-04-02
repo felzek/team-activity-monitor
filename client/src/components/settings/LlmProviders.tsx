@@ -34,8 +34,8 @@ export function LlmProviders() {
       <h3 className="settings-group-title">LLM Providers</h3>
       <p className="settings-help">
         Add direct provider keys for BYOK access. When Vercel AI Gateway is configured for the deployment,
-        gateway models are available automatically without saving a per-user key; otherwise the app falls back
-        to the configured local Ollama model.
+        hosted models like Qwen 3 32B are available automatically without saving a per-user key; otherwise the
+        app falls back to the configured local Ollama model.
       </p>
       <div className="provider-cards">
         {PROVIDERS.map((p) => (

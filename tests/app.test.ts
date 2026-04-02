@@ -126,6 +126,28 @@ function mockRepeatedLocalModelResponse(
   );
 }
 
+function mockGatewayChatResponse(
+  responseText = "Qwen says hello from the shared workspace."
+) {
+  vi.restoreAllMocks();
+  return vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    jsonResponse({
+      choices: [
+        {
+          message: {
+            content: responseText,
+          },
+        },
+      ],
+      usage: {
+        prompt_tokens: 12,
+        completion_tokens: 8,
+        total_tokens: 20,
+      },
+    })
+  );
+}
+
 async function getCsrf(agent: ReturnType<typeof request.agent>) {
   const response = await agent.get("/api/v1/auth/session");
   return response.body.csrfToken as string;
@@ -567,7 +589,7 @@ describe("enterprise api routes", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(response.body.answer).toContain("### Summary");
+      expect(response.body.answer).toContain("Guest mode is working.");
       expect(response.body.guestAccess.promptCount).toBe(index);
       expect(response.body.guestAccess.promptsRemaining).toBe(5 - index);
       expect(response.body.guestAccess.authRequired).toBe(index === 5);
@@ -609,12 +631,71 @@ describe("enterprise api routes", () => {
 
     expect(sessionResponse.status).toBe(200);
     expect(response.status).toBe(200);
-    expect(response.body.answer).toContain("### Summary");
+    expect(response.body.answer).toContain("Guest mode is working.");
     expect(response.body.guestAccess.promptCount).toBe(1);
 
     database.close();
     cleanupTestConfig(config);
   });
+
+  it("returns Gateway Qwen for guest model discovery when configured", async () => {
+    const config = buildTestConfig({
+      AI_GATEWAY_API_KEY: "agw_test_123",
+      AI_GATEWAY_MODELS: "alibaba/qwen-3-32b,openai/gpt-5.4",
+      AI_GATEWAY_DEFAULT_MODEL: "alibaba/qwen-3-32b"
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-models" }), database);
+    const agent = request.agent(app);
+
+    const response = await agent.get("/api/llm/models");
+
+    expect(response.status).toBe(200);
+    expect(response.body.models).toEqual([
+      expect.objectContaining({
+        id: "gateway:alibaba/qwen-3-32b",
+        provider: "gateway",
+        displayName: "Qwen 3 32B",
+        isPinned: true,
+        isDefaultCandidate: true
+      }),
+      expect.objectContaining({
+        id: "gateway:openai/gpt-5.4",
+        provider: "gateway"
+      })
+    ]);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
+  it("uses the real chat pipeline for guests when Gateway Qwen is configured", async () => {
+    const config = buildTestConfig({
+      AI_GATEWAY_API_KEY: "agw_test_123",
+      AI_GATEWAY_MODELS: "alibaba/qwen-3-32b",
+      AI_GATEWAY_DEFAULT_MODEL: "alibaba/qwen-3-32b"
+    });
+    const database = initializeDatabase(config);
+    const app = createApp(config, logger.child({ test: "guest-chat-gateway" }), database);
+    const agent = request.agent(app);
+
+    mockGatewayChatResponse();
+
+    const response = await postWithCsrf(agent, "/api/v1/chat", {
+      message: "What is John working on this week?",
+      modelId: "gateway:alibaba/qwen-3-32b",
+      history: []
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.answer).toBe("Qwen says hello from the shared workspace.");
+    expect(Array.isArray(response.body.toolsUsed)).toBe(true);
+    expect(response.body.guestAccess.promptCount).toBe(1);
+
+    database.close();
+    cleanupTestConfig(config);
+  });
+
   it("creates invitations and records audit events for owners", async () => {
     const { config, database, agent, organizationId } = await buildAuthenticatedAgent();
 

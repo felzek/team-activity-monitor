@@ -13,16 +13,28 @@ import type {
 
 const DEFAULT_MAX_TOKENS = 2048;
 
+const KNOWN_MODEL_NAMES: Record<string, string> = {
+  "alibaba/qwen-3-32b": "Qwen 3 32B",
+  "openai/gpt-5.4": "GPT-5.4",
+};
+
 function toDisplayName(modelId: string): string {
-  const [provider, rawModel] = modelId.split("/", 2);
-  const modelLabel = (rawModel ?? modelId)
+  const knownName = KNOWN_MODEL_NAMES[modelId];
+  if (knownName) {
+    return knownName;
+  }
+
+  const [, rawModel] = modelId.split("/", 2);
+  return (rawModel ?? modelId)
     .split(/[-._/]/)
     .map((part) =>
-      /^\d/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1)
+      /^\d+[a-z]$/i.test(part)
+        ? part.toUpperCase()
+        : /^\d/.test(part)
+          ? part
+          : part.charAt(0).toUpperCase() + part.slice(1)
     )
     .join(" ");
-
-  return `${modelLabel} (${provider ?? "gateway"})`;
 }
 
 function toOpenAiMessages(

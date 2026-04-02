@@ -92,7 +92,7 @@ const envSchema = z.object({
   AI_GATEWAY_BASE_URL: z.string().url().default("https://ai-gateway.vercel.sh/v1"),
   AI_GATEWAY_API_KEY: z.string().optional(),
   VERCEL_OIDC_TOKEN: z.string().optional(),
-  AI_GATEWAY_DEFAULT_MODEL: z.string().default("alibaba/qwen3.5-flash"),
+  AI_GATEWAY_DEFAULT_MODEL: z.string().default("alibaba/qwen-3-32b"),
   AI_GATEWAY_MODELS: csvString,
   COGNITO_USER_POOL_ID: z.string().optional(),
   COGNITO_APP_CLIENT_ID: z.string().optional(),

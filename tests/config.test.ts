@@ -31,13 +31,13 @@ describe("loadAppConfig", () => {
     const config = loadAppConfig({
       ...baseEnv,
       AI_GATEWAY_API_KEY: "agw_test_123",
-      AI_GATEWAY_MODELS: "alibaba/qwen3.5-flash,openai/gpt-5.4",
+      AI_GATEWAY_MODELS: "alibaba/qwen-3-32b,openai/gpt-5.4",
     });
 
     expect(config.aiGatewayModels).toEqual([
-      "alibaba/qwen3.5-flash",
+      "alibaba/qwen-3-32b",
       "openai/gpt-5.4",
     ]);
-    expect(config.defaultModelId).toBe("gateway:alibaba/qwen3.5-flash");
+    expect(config.defaultModelId).toBe("gateway:alibaba/qwen-3-32b");
   });
 });

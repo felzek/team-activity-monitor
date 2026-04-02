@@ -150,7 +150,7 @@ describe("system LLM responses", () => {
       DATABASE_PATH: "data/test.db",
       SESSION_SECRET: "test-session-secret",
       AI_GATEWAY_API_KEY: "agw_test_123",
-      AI_GATEWAY_DEFAULT_MODEL: "alibaba/qwen3.5-flash"
+      AI_GATEWAY_DEFAULT_MODEL: "alibaba/qwen-3-32b"
     });
 
     const response = await generateGroundedResponse(
@@ -168,7 +168,7 @@ describe("system LLM responses", () => {
       messages: Array<{ role: string; content: string }>;
     };
 
-    expect(gatewayPayload.model).toBe("alibaba/qwen3.5-flash");
+    expect(gatewayPayload.model).toBe("alibaba/qwen-3-32b");
     expect(gatewayPayload.messages[0]?.role).toBe("system");
     expect(gatewayPayload.messages[1]?.content).toContain("\"displayName\": \"John Doe\"");
 

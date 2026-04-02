@@ -118,7 +118,7 @@ Set these in Project Settings -> Environment Variables:
 | `USE_RECORDED_FIXTURES` | Yes | `true` for demo mode, `false` for live Jira/GitHub traffic |
 | `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` | One required for hosted AI | Gateway auth |
 | `AI_GATEWAY_DEFAULT_MODEL` | Recommended | Default hosted model slug |
-| `DEFAULT_MODEL_ID` | Recommended | Example: `gateway:alibaba/qwen3.5-flash` |
+| `DEFAULT_MODEL_ID` | Recommended | Example: `gateway:alibaba/qwen-3-32b` |
 
 If `USE_RECORDED_FIXTURES=false`, also set the live provider credentials you use:
 
@@ -165,9 +165,9 @@ These values match the current repo defaults:
 
 ```env
 AI_GATEWAY_BASE_URL=https://ai-gateway.vercel.sh/v1
-AI_GATEWAY_DEFAULT_MODEL=alibaba/qwen3.5-flash
-AI_GATEWAY_MODELS=alibaba/qwen3.5-flash,openai/gpt-5.4,anthropic/claude-sonnet-4-6
-DEFAULT_MODEL_ID=gateway:alibaba/qwen3.5-flash
+AI_GATEWAY_DEFAULT_MODEL=alibaba/qwen-3-32b
+AI_GATEWAY_MODELS=alibaba/qwen-3-32b,openai/gpt-5.4,anthropic/claude-sonnet-4-6
+DEFAULT_MODEL_ID=gateway:alibaba/qwen-3-32b
 ```
 
 ### Authentication
