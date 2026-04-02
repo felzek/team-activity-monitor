@@ -16,6 +16,7 @@ interface ConnectorsResponse {
 interface ProviderAuthResponse {
   github?: { status: string; displayName?: string; connectedAt?: string };
   jira?: { status: string; displayName?: string; connectedAt?: string };
+  google?: { status: string; displayName?: string; connectedAt?: string };
   providerModes?: Record<string, string>;
 }
 
@@ -56,14 +57,14 @@ export function Connectors() {
   return (
     <div className="settings-group">
       <h3 className="settings-group-title">Data Sources</h3>
-      <p className="settings-help">Connect GitHub and Jira to enable workspace queries.</p>
+      <p className="settings-help">Connect GitHub, Jira, and Google to enable workspace queries.</p>
 
-      {(["github", "jira"] as const).map((provider) => {
+      {(["github", "jira", "google"] as const).map((provider) => {
         const conn = connectors.find((c) => c.provider === provider);
         const auth = providerAuth?.[provider];
         const isConnected = auth?.status === "connected";
         const mode = providerAuth?.providerModes?.[provider] ?? "unavailable";
-        const label = provider === "github" ? "GitHub" : "Jira";
+        const label = provider === "github" ? "GitHub" : provider === "jira" ? "Jira" : "Google";
 
         return (
           <div key={provider} className="connector-card">
