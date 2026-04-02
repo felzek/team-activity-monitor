@@ -23,6 +23,22 @@ const BASE_URL = "https://api.openai.com/v1";
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_TOKENS = 2048;
 
+/**
+ * Newer OpenAI models (gpt-5.x, o1, o3, o4, etc.) use `max_completion_tokens`.
+ * Legacy models (gpt-4o, gpt-4-turbo, gpt-3.5-turbo) use `max_tokens`.
+ */
+function maxTokensParam(modelId: string): "max_completion_tokens" | "max_tokens" {
+  if (
+    modelId.startsWith("gpt-5") ||
+    modelId.startsWith("o1") ||
+    modelId.startsWith("o3") ||
+    modelId.startsWith("o4")
+  ) {
+    return "max_completion_tokens";
+  }
+  return "max_tokens";
+}
+
 /** Model ID prefixes that indicate chat capability */
 const CHAT_PREFIXES = ["gpt-5", "gpt-4", "gpt-3.5-turbo", "o1", "o3", "o4", "chatgpt-"];
 
@@ -218,7 +234,7 @@ export class OpenAiAdapter implements LlmProviderAdapter {
       const body: Record<string, unknown> = {
         model: request.modelId,
         messages: toOpenAiMessages(request.messages),
-        max_tokens: request.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
+        [maxTokensParam(request.modelId)]: request.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
       };
 
       if (request.temperature !== undefined) body.temperature = request.temperature;
