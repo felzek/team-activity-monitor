@@ -156,10 +156,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
       requestAuth();
       return;
     }
-    setSelectedAction(action);
-    setInput(action.prompt);
-    setFocusToken((token) => token + 1);
-  }, [guestWorkspace, requestAuth]);
+    setSelectedAction(null);
+    setInput("");
+    void sendMessage(action.prompt, action);
+  }, [guestWorkspace, requestAuth, sendMessage]);
 
   const handleSuggestionSelect = useCallback((text: string) => {
     if (guestWorkspace) {
@@ -176,10 +176,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     setFocusToken((token) => token + 1);
   }, []);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
+  const sendMessage = useCallback(async (overrideText?: string, overrideAction?: ArtifactQuickAction | null) => {
+    const text = (overrideText ?? input).trim();
     if (!text || chatTurn.isPending) return;
-    const pendingAction = selectedAction;
+    const pendingAction = overrideAction !== undefined ? overrideAction : selectedAction;
 
     setInput("");
     setSelectedAction(null);
