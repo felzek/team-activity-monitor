@@ -195,7 +195,7 @@ async function executeSearchJiraIssues(
   start: number
 ): Promise<ToolResult> {
   const accountId = String(args["jira_account_id"] ?? "");
-  const since = String(args["since"] ?? new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10));
+  const since = String(args["since"] ?? new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10));
 
   if (!accountId) {
     return {
@@ -271,7 +271,7 @@ async function executeGetGitHubCommits(
   start: number
 ): Promise<ToolResult> {
   const username = String(args["github_username"] ?? "");
-  const since = String(args["since"] ?? new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10));
+  const since = String(args["since"] ?? new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10));
 
   if (!username) {
     return {
@@ -349,7 +349,7 @@ async function executeGetGitHubPRs(
   start: number
 ): Promise<ToolResult> {
   const username = String(args["github_username"] ?? "");
-  const since = String(args["since"] ?? new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10));
+  const since = String(args["since"] ?? new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10));
 
   if (!username) {
     return {
@@ -483,7 +483,7 @@ async function executeSummarizeTeamActivity(
   ctx: ToolExecutorContext,
   start: number
 ): Promise<ToolResult> {
-  const since = String(args["since"] ?? new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10));
+  const since = String(args["since"] ?? new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10));
 
   const overridden = buildTimeframe(since, ctx.timezone);
 

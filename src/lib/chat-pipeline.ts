@@ -297,6 +297,7 @@ function buildSystemPrompt(opts: ChatTurnOptions): string {
 - For "show X's pull requests" → only call get_github_prs.
 - For "what Jira issues..." → only call search_jira_issues.
 - For team-wide questions → call summarize_team_activity.
+- NEVER ask the user for a date range. If none is specified, omit the `since` parameter and the tool will use a 90-day default. Proceed immediately with the tool call.
 
 ## OUTPUT FORMAT
 Respond with these sections (omit sections with no data):

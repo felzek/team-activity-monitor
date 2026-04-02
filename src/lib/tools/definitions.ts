@@ -56,7 +56,7 @@ const resolvePerson: ToolDefinition = {
 const searchJiraIssues: ToolDefinition = {
   name: "search_jira_issues",
   description:
-    "Search Jira for issues assigned to a specific person within a date range. " +
+    "Search Jira for issues assigned to a specific person. " +
     "Returns issue keys, summaries, statuses, priorities, and recent changelog entries. " +
     "Requires the Jira account ID from resolve_person.",
   parameters: {
@@ -68,14 +68,14 @@ const searchJiraIssues: ToolDefinition = {
       },
       since: {
         type: "string",
-        description: "ISO 8601 date string (YYYY-MM-DD) for the start of the date range"
+        description: "Optional ISO 8601 date string (YYYY-MM-DD) for the start of the date range. Defaults to 90 days ago if omitted."
       },
       max_results: {
         type: "string",
-        description: "Maximum number of issues to return, default '10', max '25'"
+        description: "Maximum number of issues to return, default '25', max '50'"
       }
     },
-    required: ["jira_account_id", "since"]
+    required: ["jira_account_id"]
   }
 };
 
@@ -97,10 +97,10 @@ const getGitHubCommits: ToolDefinition = {
       },
       since: {
         type: "string",
-        description: "ISO 8601 date string (YYYY-MM-DD) for the start of the date range"
+        description: "Optional ISO 8601 date string (YYYY-MM-DD). Defaults to 90 days ago if omitted."
       }
     },
-    required: ["github_username", "since"]
+    required: ["github_username"]
   }
 };
 
@@ -121,10 +121,10 @@ const getGitHubPRs: ToolDefinition = {
       },
       since: {
         type: "string",
-        description: "ISO 8601 date string (YYYY-MM-DD) for the start of the date range"
+        description: "Optional ISO 8601 date string (YYYY-MM-DD). Defaults to 90 days ago if omitted."
       }
     },
-    required: ["github_username", "since"]
+    required: ["github_username"]
   }
 };
 
@@ -173,10 +173,10 @@ const summarizeTeamActivity: ToolDefinition = {
     properties: {
       since: {
         type: "string",
-        description: "ISO 8601 date string (YYYY-MM-DD) for the start of the date range"
+        description: "Optional ISO 8601 date string (YYYY-MM-DD). Defaults to 90 days ago if omitted."
       }
     },
-    required: ["since"]
+    required: []
   }
 };
 
