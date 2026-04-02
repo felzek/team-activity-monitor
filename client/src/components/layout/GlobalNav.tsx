@@ -7,7 +7,7 @@ interface Props {
 
 export function GlobalNav({ onLogout }: Props) {
   const location = useLocation();
-  const { authenticated, guestAccess, userDisplayName, orgName } = useSessionStore();
+  const { authenticated, guestAccess, userDisplayName, orgName, openAuthModal } = useSessionStore();
 
   return (
     <nav className="global-nav">
@@ -22,10 +22,18 @@ export function GlobalNav({ onLogout }: Props) {
         <Link to="/app" className={`global-nav-link${location.pathname === "/app" ? " active" : ""}`}>
           Workspace
         </Link>
-        {authenticated && (
+        {authenticated ? (
           <Link to="/settings" className={`global-nav-link${location.pathname.startsWith("/settings") ? " active" : ""}`}>
             Settings
           </Link>
+        ) : (
+          <button
+            type="button"
+            className="global-nav-link global-nav-link--locked"
+            onClick={() => openAuthModal("login")}
+          >
+            Settings
+          </button>
         )}
       </div>
 
@@ -38,14 +46,14 @@ export function GlobalNav({ onLogout }: Props) {
           <button className="btn-secondary" onClick={onLogout}>Log out</button>
         </div>
       ) : (
-        <div className="global-nav-guest">
+        <button type="button" className="global-nav-guest" onClick={() => openAuthModal("login")}>
           <span className="global-nav-guest-label">Guest mode</span>
           {guestAccess && (
             <span className="global-nav-guest-usage">
               {guestAccess.promptsRemaining} of {guestAccess.promptLimit} prompts left
             </span>
           )}
-        </div>
+        </button>
       )}
     </nav>
   );

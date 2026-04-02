@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type SyntheticEvent } from "react";
 import type { ConversationEntry } from "@/api/types";
 
 interface Props {
@@ -9,6 +9,9 @@ interface Props {
   onArchive: () => void;
   onDelete: () => void;
   onRename: (title: string) => void;
+  locked?: boolean;
+  onLockedClick?: () => void;
+  lockedLabel?: string;
 }
 
 export function ConversationItem({
@@ -19,6 +22,9 @@ export function ConversationItem({
   onArchive,
   onDelete,
   onRename,
+  locked = false,
+  onLockedClick,
+  lockedLabel,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -57,14 +63,24 @@ export function ConversationItem({
     ? conversation.lastMessagePreview.slice(0, 60) + (conversation.lastMessagePreview.length > 60 ? "..." : "")
     : `${conversation.messageCount} messages`;
 
+  const handleLockedClick = (event?: SyntheticEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    onLockedClick?.();
+  };
+
   return (
     <div
-      className={`conversation-item${active ? " active" : ""}`}
+      className={`conversation-item${active ? " active" : ""}${locked ? " is-locked" : ""}`}
       role="listitem"
       aria-current={active ? "page" : undefined}
-      onClick={renaming ? undefined : onSelect}
+      onClick={locked ? handleLockedClick : renaming ? undefined : onSelect}
       onContextMenu={(e) => {
         e.preventDefault();
+        if (locked) {
+          handleLockedClick(e);
+          return;
+        }
         setMenuOpen(true);
       }}
     >
@@ -91,6 +107,7 @@ export function ConversationItem({
         <>
           <span className="conversation-title">{conversation.title}</span>
           <span className="conversation-subtitle">{subtitle}</span>
+          {lockedLabel && <span className="conversation-lock-badge">{lockedLabel}</span>}
         </>
       )}
 
@@ -98,6 +115,10 @@ export function ConversationItem({
       <button
         className="conversation-menu-trigger"
         onClick={(e) => {
+          if (locked) {
+            handleLockedClick(e);
+            return;
+          }
           e.stopPropagation();
           setMenuOpen(!menuOpen);
           setConfirmDelete(false);

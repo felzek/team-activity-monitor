@@ -14,6 +14,8 @@ interface Props {
   intentLabel?: string | null;
   onClearIntent?: () => void;
   focusToken?: number;
+  lockModelSelection?: boolean;
+  onLockedInteraction?: () => void;
 }
 
 export function ChatInput({
@@ -29,6 +31,8 @@ export function ChatInput({
   intentLabel,
   onClearIntent,
   focusToken,
+  lockModelSelection = false,
+  onLockedInteraction,
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -96,7 +100,12 @@ export function ChatInput({
         </div>
 
         <div className="chat-input-meta">
-          <ModelSelector value={modelId} onChange={onModelChange} />
+          <ModelSelector
+            value={modelId}
+            onChange={onModelChange}
+            locked={lockModelSelection}
+            onLockedClick={onLockedInteraction}
+          />
           <span className="chat-input-hint">Shift+Enter for new line</span>
         </div>
       </div>

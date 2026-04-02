@@ -3,6 +3,11 @@ import { useChatStore } from "@/store/chatStore";
 import { ConversationItem } from "./ConversationItem";
 import { SectionGroup } from "./SectionGroup";
 import type { ConversationEntry } from "@/api/types";
+import {
+  GUEST_PREVIEW_ACTIVE_ID,
+  GUEST_PREVIEW_CONVERSATIONS,
+  GUEST_PREVIEW_PROJECTS,
+} from "./guestPreviewData";
 
 function groupByTime(conversations: ConversationEntry[]) {
   const now = new Date();
@@ -26,9 +31,11 @@ function groupByTime(conversations: ConversationEntry[]) {
 
 interface Props {
   onNewChat: () => void;
+  guestMode?: boolean;
+  onRequireAuth?: () => void;
 }
 
-export function HistorySidebar({ onNewChat }: Props) {
+export function HistorySidebar({ onNewChat, guestMode = false, onRequireAuth }: Props) {
   const {
     conversations,
     projects,
@@ -50,12 +57,24 @@ export function HistorySidebar({ onNewChat }: Props) {
   const searchConversations = useChatStore((s) => s.searchConversations);
 
   useEffect(() => {
+    if (guestMode) {
+      return;
+    }
     void loadConversations();
     void loadProjects();
-  }, [loadConversations, loadProjects]);
+  }, [guestMode, loadConversations, loadProjects]);
+
+  const handleLockedInteraction = useCallback(() => {
+    onRequireAuth?.();
+  }, [onRequireAuth]);
 
   const handleSearch = useCallback(
     (q: string) => {
+      if (guestMode) {
+        handleLockedInteraction();
+        return;
+      }
+
       setSearchQuery(q);
       clearTimeout(searchTimeout.current);
       if (!q.trim()) {
@@ -67,14 +86,14 @@ export function HistorySidebar({ onNewChat }: Props) {
         setSearchResults(results);
       }, 250);
     },
-    [setSearchQuery, searchConversations],
+    [guestMode, handleLockedInteraction, searchConversations, setSearchQuery],
   );
 
   if (!sidebarOpen) {
     return (
       <button
         className="sidebar-expand-btn"
-        onClick={toggleSidebar}
+        onClick={guestMode ? handleLockedInteraction : toggleSidebar}
         title="Open sidebar"
         aria-label="Open chat history sidebar"
       >
@@ -85,31 +104,64 @@ export function HistorySidebar({ onNewChat }: Props) {
     );
   }
 
-  const pinned = conversations.filter((c) => c.pinned && !c.archivedAt);
+  const visibleConversations = guestMode ? GUEST_PREVIEW_CONVERSATIONS : conversations;
+  const visibleProjects = guestMode ? GUEST_PREVIEW_PROJECTS : projects;
+  const resolvedActiveConversationId = guestMode ? GUEST_PREVIEW_ACTIVE_ID : activeConversationId;
+
+  const pinned = visibleConversations.filter((c) => c.pinned && !c.archivedAt);
   const projectMap = new Map<string, ConversationEntry[]>();
-  for (const c of conversations) {
+  for (const c of visibleConversations) {
     if (c.projectId && !c.pinned && !c.archivedAt) {
       const list = projectMap.get(c.projectId) ?? [];
       list.push(c);
       projectMap.set(c.projectId, list);
     }
   }
-  const { today, thisWeek, earlier } = groupByTime(conversations.filter((c) => !c.archivedAt));
-  const archivedCount = conversations.filter((c) => c.archivedAt).length;
+  const { today, thisWeek, earlier } = groupByTime(visibleConversations.filter((c) => !c.archivedAt));
+  const archivedCount = guestMode ? 3 : conversations.filter((c) => c.archivedAt).length;
 
-  const displayConversations = searchResults ?? undefined;
+  const displayConversations = guestMode ? null : searchResults;
+  const lockedLabel = guestMode ? "Sign in to open" : undefined;
+
+  const renderConversation = (
+    conversation: ConversationEntry,
+    callbacks: {
+      onPin: () => void;
+      onArchive: () => void;
+      onDelete: () => void;
+      onRename: (title: string) => void;
+    }
+  ) => (
+    <ConversationItem
+      key={conversation.id}
+      conversation={conversation}
+      active={conversation.id === resolvedActiveConversationId}
+      onSelect={() => setActiveConversation(conversation.id)}
+      onPin={callbacks.onPin}
+      onArchive={callbacks.onArchive}
+      onDelete={callbacks.onDelete}
+      onRename={callbacks.onRename}
+      locked={guestMode}
+      onLockedClick={handleLockedInteraction}
+      lockedLabel={lockedLabel}
+    />
+  );
 
   return (
     <aside className="history-sidebar" role="navigation" aria-label="Chat history">
-      {/* Action bar */}
       <div className="sidebar-action-bar">
-        <button className="btn-primary sidebar-new-chat" onClick={onNewChat}>
+        <button className="btn-primary sidebar-new-chat" onClick={guestMode ? handleLockedInteraction : onNewChat}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M12 5v14M5 12h14" />
           </svg>
           New Chat
         </button>
-        <button className="btn-ghost" onClick={toggleSidebar} title="Close sidebar" aria-label="Close sidebar">
+        <button
+          className="btn-ghost"
+          onClick={guestMode ? handleLockedInteraction : toggleSidebar}
+          title="Close sidebar"
+          aria-label="Close sidebar"
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="3" width="18" height="18" rx="2" />
             <line x1="9" y1="3" x2="9" y2="21" />
@@ -117,8 +169,16 @@ export function HistorySidebar({ onNewChat }: Props) {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="sidebar-search">
+      {guestMode && (
+        <div className="sidebar-guest-banner">
+          Sample workspace preview. Sign in to open threads, search history, and save chats.
+        </div>
+      )}
+
+      <div
+        className={`sidebar-search${guestMode ? " is-locked" : ""}`}
+        onClick={guestMode ? handleLockedInteraction : undefined}
+      >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -126,12 +186,14 @@ export function HistorySidebar({ onNewChat }: Props) {
         <input
           type="text"
           placeholder="Search conversations..."
-          value={searchQuery}
+          value={guestMode ? "" : searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
+          onFocus={guestMode ? handleLockedInteraction : undefined}
           className="sidebar-search-input"
           aria-label="Search conversations"
+          readOnly={guestMode}
         />
-        {searchQuery && (
+        {searchQuery && !guestMode && (
           <button
             className="sidebar-search-clear"
             onClick={() => handleSearch("")}
@@ -145,133 +207,133 @@ export function HistorySidebar({ onNewChat }: Props) {
         )}
       </div>
 
-      {/* Conversation list */}
       <div className="sidebar-list" role="list">
-        {loading && conversations.length === 0 ? (
+        {loading && !guestMode && conversations.length === 0 ? (
           <div className="sidebar-skeleton">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="skeleton-item" />
             ))}
           </div>
         ) : displayConversations ? (
-          // Search results
           displayConversations.length === 0 ? (
             <div className="sidebar-empty-search">
               <p>No conversations matching "{searchQuery}"</p>
               <p className="muted">Try a different search term</p>
             </div>
           ) : (
-            displayConversations.map((c) => (
-              <ConversationItem
-                key={c.id}
-                conversation={c}
-                active={c.id === activeConversationId}
-                onSelect={() => { setActiveConversation(c.id); setSearchQuery(""); setSearchResults(null); }}
-                onPin={() => void updateConversation(c.id, { pinned: !c.pinned })}
-                onArchive={() => void updateConversation(c.id, { archived: true })}
-                onDelete={() => void deleteConversation(c.id)}
-                onRename={(title) => void updateConversation(c.id, { title })}
-              />
-            ))
+            displayConversations.map((conversation) =>
+              renderConversation(conversation, {
+                onPin: () => void updateConversation(conversation.id, { pinned: !conversation.pinned }),
+                onArchive: () => void updateConversation(conversation.id, { archived: true }),
+                onDelete: () => void deleteConversation(conversation.id),
+                onRename: (title) => void updateConversation(conversation.id, { title }),
+              })
+            )
           )
         ) : (
           <>
-            {/* Pinned */}
             {pinned.length > 0 && (
-              <SectionGroup label="Pinned" count={pinned.length} defaultOpen>
-                {pinned.map((c) => (
-                  <ConversationItem
-                    key={c.id}
-                    conversation={c}
-                    active={c.id === activeConversationId}
-                    onSelect={() => setActiveConversation(c.id)}
-                    onPin={() => void updateConversation(c.id, { pinned: false })}
-                    onArchive={() => void updateConversation(c.id, { archived: true })}
-                    onDelete={() => void deleteConversation(c.id)}
-                    onRename={(title) => void updateConversation(c.id, { title })}
-                  />
-                ))}
+              <SectionGroup
+                label="Pinned"
+                count={pinned.length}
+                defaultOpen
+                locked={guestMode}
+                onLockedClick={handleLockedInteraction}
+              >
+                {pinned.map((conversation) =>
+                  renderConversation(conversation, {
+                    onPin: () => void updateConversation(conversation.id, { pinned: false }),
+                    onArchive: () => void updateConversation(conversation.id, { archived: true }),
+                    onDelete: () => void deleteConversation(conversation.id),
+                    onRename: (title) => void updateConversation(conversation.id, { title }),
+                  })
+                )}
               </SectionGroup>
             )}
 
-            {/* Projects */}
-            {projects.length > 0 && (
-              <SectionGroup label="Projects" count={projects.length}>
-                {projects.map((p) => (
-                  <SectionGroup key={p.id} label={p.name} icon="folder" nested>
-                    {(projectMap.get(p.id) ?? []).map((c) => (
-                      <ConversationItem
-                        key={c.id}
-                        conversation={c}
-                        active={c.id === activeConversationId}
-                        onSelect={() => setActiveConversation(c.id)}
-                        onPin={() => void updateConversation(c.id, { pinned: !c.pinned })}
-                        onArchive={() => void updateConversation(c.id, { archived: true })}
-                        onDelete={() => void deleteConversation(c.id)}
-                        onRename={(title) => void updateConversation(c.id, { title })}
-                      />
-                    ))}
+            {visibleProjects.length > 0 && (
+              <SectionGroup
+                label="Projects"
+                count={visibleProjects.length}
+                locked={guestMode}
+                onLockedClick={handleLockedInteraction}
+              >
+                {visibleProjects.map((project) => (
+                  <SectionGroup
+                    key={project.id}
+                    label={project.name}
+                    icon="folder"
+                    nested
+                    locked={guestMode}
+                    onLockedClick={handleLockedInteraction}
+                  >
+                    {(projectMap.get(project.id) ?? []).map((conversation) =>
+                      renderConversation(conversation, {
+                        onPin: () => void updateConversation(conversation.id, { pinned: !conversation.pinned }),
+                        onArchive: () => void updateConversation(conversation.id, { archived: true }),
+                        onDelete: () => void deleteConversation(conversation.id),
+                        onRename: (title) => void updateConversation(conversation.id, { title }),
+                      })
+                    )}
                   </SectionGroup>
                 ))}
               </SectionGroup>
             )}
 
-            {/* Today */}
             {today.length > 0 && (
-              <SectionGroup label="Today" defaultOpen>
-                {today.map((c) => (
-                  <ConversationItem
-                    key={c.id}
-                    conversation={c}
-                    active={c.id === activeConversationId}
-                    onSelect={() => setActiveConversation(c.id)}
-                    onPin={() => void updateConversation(c.id, { pinned: true })}
-                    onArchive={() => void updateConversation(c.id, { archived: true })}
-                    onDelete={() => void deleteConversation(c.id)}
-                    onRename={(title) => void updateConversation(c.id, { title })}
-                  />
-                ))}
+              <SectionGroup
+                label="Today"
+                defaultOpen
+                locked={guestMode}
+                onLockedClick={handleLockedInteraction}
+              >
+                {today.map((conversation) =>
+                  renderConversation(conversation, {
+                    onPin: () => void updateConversation(conversation.id, { pinned: true }),
+                    onArchive: () => void updateConversation(conversation.id, { archived: true }),
+                    onDelete: () => void deleteConversation(conversation.id),
+                    onRename: (title) => void updateConversation(conversation.id, { title }),
+                  })
+                )}
               </SectionGroup>
             )}
 
-            {/* This Week */}
             {thisWeek.length > 0 && (
-              <SectionGroup label="This Week" defaultOpen>
-                {thisWeek.map((c) => (
-                  <ConversationItem
-                    key={c.id}
-                    conversation={c}
-                    active={c.id === activeConversationId}
-                    onSelect={() => setActiveConversation(c.id)}
-                    onPin={() => void updateConversation(c.id, { pinned: true })}
-                    onArchive={() => void updateConversation(c.id, { archived: true })}
-                    onDelete={() => void deleteConversation(c.id)}
-                    onRename={(title) => void updateConversation(c.id, { title })}
-                  />
-                ))}
+              <SectionGroup
+                label="This Week"
+                defaultOpen
+                locked={guestMode}
+                onLockedClick={handleLockedInteraction}
+              >
+                {thisWeek.map((conversation) =>
+                  renderConversation(conversation, {
+                    onPin: () => void updateConversation(conversation.id, { pinned: true }),
+                    onArchive: () => void updateConversation(conversation.id, { archived: true }),
+                    onDelete: () => void deleteConversation(conversation.id),
+                    onRename: (title) => void updateConversation(conversation.id, { title }),
+                  })
+                )}
               </SectionGroup>
             )}
 
-            {/* Earlier */}
             {earlier.length > 0 && (
-              <SectionGroup label="Earlier">
-                {earlier.map((c) => (
-                  <ConversationItem
-                    key={c.id}
-                    conversation={c}
-                    active={c.id === activeConversationId}
-                    onSelect={() => setActiveConversation(c.id)}
-                    onPin={() => void updateConversation(c.id, { pinned: true })}
-                    onArchive={() => void updateConversation(c.id, { archived: true })}
-                    onDelete={() => void deleteConversation(c.id)}
-                    onRename={(title) => void updateConversation(c.id, { title })}
-                  />
-                ))}
+              <SectionGroup
+                label="Earlier"
+                locked={guestMode}
+                onLockedClick={handleLockedInteraction}
+              >
+                {earlier.map((conversation) =>
+                  renderConversation(conversation, {
+                    onPin: () => void updateConversation(conversation.id, { pinned: true }),
+                    onArchive: () => void updateConversation(conversation.id, { archived: true }),
+                    onDelete: () => void deleteConversation(conversation.id),
+                    onRename: (title) => void updateConversation(conversation.id, { title }),
+                  })
+                )}
               </SectionGroup>
             )}
 
-            {/* Empty state */}
-            {conversations.length === 0 && !loading && (
+            {visibleConversations.length === 0 && !loading && (
               <div className="sidebar-empty">
                 <div className="sidebar-empty-icon">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -283,9 +345,8 @@ export function HistorySidebar({ onNewChat }: Props) {
               </div>
             )}
 
-            {/* Archived link */}
             {archivedCount > 0 && (
-              <div className="sidebar-archived-link">
+              <div className="sidebar-archived-link" onClick={guestMode ? handleLockedInteraction : undefined}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="21 8 21 21 3 21 3 8" />
                   <rect x="1" y="3" width="22" height="5" />

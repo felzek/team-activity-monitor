@@ -9,6 +9,8 @@ interface UserMessageProps {
 
 interface AssistantMessageProps {
   result: ChatTurnResult;
+  guestLocked?: boolean;
+  onLockedInteraction?: () => void;
 }
 
 interface ThinkingStatus {
@@ -44,7 +46,11 @@ export function UserMessage({ message }: UserMessageProps) {
   );
 }
 
-export function AssistantMessage({ result }: AssistantMessageProps) {
+export function AssistantMessage({
+  result,
+  guestLocked = false,
+  onLockedInteraction,
+}: AssistantMessageProps) {
   // Extract chart suggestions for inline rendering
   const chartSuggestions = result.artifactSuggestions?.filter((s) => s.kind === "chart") ?? [];
 
@@ -79,11 +85,20 @@ export function AssistantMessage({ result }: AssistantMessageProps) {
 
       {/* Artifact action buttons */}
       {result.artifactSuggestions && result.artifactSuggestions.length > 0 && (
-        <ArtifactActions suggestions={result.artifactSuggestions} />
+        <ArtifactActions
+          suggestions={result.artifactSuggestions}
+          locked={guestLocked}
+          onLockedInteraction={onLockedInteraction}
+        />
       )}
 
       {result.toolsUsed.length > 0 && (
-        <ToolCallPanel tools={result.toolsUsed} latencyMs={result.totalLatencyMs} />
+        <ToolCallPanel
+          tools={result.toolsUsed}
+          latencyMs={result.totalLatencyMs}
+          locked={guestLocked}
+          onLockedInteraction={onLockedInteraction}
+        />
       )}
       {result.sources && result.sources.length > 0 && (
         <SourceBadges badges={result.sources} />

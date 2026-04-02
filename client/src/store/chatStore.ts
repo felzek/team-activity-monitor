@@ -27,6 +27,7 @@ interface ChatStore {
   searchConversations: (query: string) => Promise<ConversationEntry[]>;
   loadMessages: (conversationId: string) => Promise<MessagesResponse>;
   toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
   setSearchQuery: (q: string) => void;
 
   // Project actions
@@ -104,6 +105,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   setSearchQuery: (q) => set({ searchQuery: q }),
 

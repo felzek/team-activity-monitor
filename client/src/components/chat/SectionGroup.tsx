@@ -7,16 +7,33 @@ interface Props {
   defaultOpen?: boolean;
   nested?: boolean;
   children: ReactNode;
+  locked?: boolean;
+  onLockedClick?: () => void;
 }
 
-export function SectionGroup({ label, count, icon, defaultOpen = false, nested = false, children }: Props) {
+export function SectionGroup({
+  label,
+  count,
+  icon,
+  defaultOpen = false,
+  nested = false,
+  children,
+  locked = false,
+  onLockedClick,
+}: Props) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div className={`section-group${nested ? " nested" : ""}`} role="group" aria-label={label}>
       <button
-        className="section-group-header"
-        onClick={() => setOpen(!open)}
+        className={`section-group-header${locked ? " is-locked" : ""}`}
+        onClick={() => {
+          if (locked) {
+            onLockedClick?.();
+            return;
+          }
+          setOpen(!open);
+        }}
         aria-expanded={open}
       >
         <svg

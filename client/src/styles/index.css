@@ -131,6 +131,12 @@ button {
   text-decoration: none;
   transition: color 0.12s, background 0.12s;
 }
+.global-nav-link--locked {
+  border: none;
+  background: none;
+  font-family: var(--font);
+  cursor: pointer;
+}
 .global-nav-link:hover { color: var(--text); background: var(--hover-bg); }
 .global-nav-link.active { color: var(--accent); background: rgba(91, 94, 244, 0.08); font-weight: 500; }
 
@@ -146,6 +152,11 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font);
+  padding: 0;
 }
 
 .global-nav-guest-label,
@@ -411,6 +422,19 @@ button {
   transform: translateY(-1px);
 }
 
+.chat-welcome-action.is-locked::after {
+  content: "Sign in";
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
 .chat-welcome-action.is-selected {
   border-color: rgba(91, 94, 244, 0.36);
   background: rgba(91, 94, 244, 0.08);
@@ -437,6 +461,11 @@ button {
   border-bottom-color: rgba(29, 29, 31, 0.2);
 }
 
+.chat-welcome-ask-link.is-locked::after {
+  content: " · Sign in";
+  color: var(--text-muted);
+}
+
 .chat-welcome-preview-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -460,6 +489,14 @@ button {
   border-color: rgba(91, 94, 244, 0.28);
   box-shadow: 0 12px 28px rgba(91, 94, 244, 0.08);
   transform: translateY(-1px);
+}
+
+.chat-welcome-preview-card.is-locked::after {
+  content: "Sign in to use";
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .chat-welcome-preview-image {
@@ -744,6 +781,14 @@ button {
 .tool-calls-toggle:hover { background: var(--hover-bg); }
 .tool-calls-toggle svg { color: var(--accent); flex-shrink: 0; }
 
+.tool-calls-panel.is-locked .tool-calls-toggle::after {
+  content: "Sign in";
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
 .tool-calls-body {
   padding: 8px 10px;
   background: var(--surface);
@@ -934,6 +979,18 @@ button {
   cursor: pointer;
 }
 .model-selector:focus { border-color: var(--accent); }
+
+.model-selector--locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-selector-lock {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
 
 .chat-input-hint {
   font-size: 0.72rem;
@@ -1657,6 +1714,17 @@ button {
   padding: 10px 10px 6px;
 }
 
+.sidebar-guest-banner {
+  margin: 0 10px 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(91, 94, 244, 0.12);
+  border-radius: 10px;
+  background: rgba(91, 94, 244, 0.06);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .sidebar-new-chat {
   flex: 1;
   display: flex;
@@ -1681,6 +1749,10 @@ button {
 }
 .sidebar-search:focus-within {
   border-color: var(--accent);
+}
+
+.sidebar-search.is-locked {
+  cursor: pointer;
 }
 
 .sidebar-search-input {
@@ -1792,6 +1864,14 @@ button {
 }
 .section-group-header:hover { background: var(--hover-bg); }
 
+.section-group-header.is-locked::after {
+  content: "Sign in";
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .section-group-chevron {
   transition: transform 0.15s ease;
   flex-shrink: 0;
@@ -1839,6 +1919,10 @@ button {
   border-left-color: var(--accent);
 }
 
+.conversation-item.is-locked {
+  cursor: pointer;
+}
+
 .conversation-pin-icon {
   position: absolute;
   top: 6px;
@@ -1864,6 +1948,21 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   padding-right: 20px;
+}
+
+.conversation-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  margin-top: 6px;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .conversation-rename-input {
@@ -1956,20 +2055,6 @@ button {
   overflow: hidden;
 }
 
-.workspace-layout--guest {
-  padding: 18px;
-  background:
-    radial-gradient(circle at top, rgba(91, 94, 244, 0.08), transparent 38%),
-    var(--bg);
-}
-
-.workspace-main--guest {
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
-}
-
 /* ── Mobile sidebar ── */
 @media (max-width: 768px) {
   .history-sidebar {
@@ -2023,6 +2108,13 @@ button {
 .artifact-suggest-btn:hover:not(:disabled) {
   background: var(--accent);
   color: #fff;
+}
+
+.artifact-suggest-btn.is-locked::after {
+  content: "Sign in";
+  margin-left: 2px;
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .artifact-suggest-btn:disabled {
@@ -2672,20 +2764,6 @@ button {
   color: var(--text-muted);
 }
 
-.auth-reopen-button {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: 320;
-  min-height: 42px;
-  padding: 0 16px;
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: 999px;
-  background: rgba(29, 29, 31, 0.92);
-  color: #fff;
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
-}
-
 @media (max-width: 860px) {
   .auth-modal-provider-grid {
     grid-template-columns: 1fr;
@@ -2693,14 +2771,6 @@ button {
 }
 
 @media (max-width: 640px) {
-  .workspace-layout--guest {
-    padding: 12px;
-  }
-
-  .workspace-main--guest {
-    border-radius: 16px;
-  }
-
   .auth-modal-overlay {
     padding: 12px;
   }

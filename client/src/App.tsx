@@ -61,7 +61,6 @@ function AppLayout() {
   const navigate = useNavigate();
 
   const authenticated = useSessionStore((state) => state.authenticated);
-  const guestAccess = useSessionStore((state) => state.guestAccess);
   const authModalOpen = useSessionStore((state) => state.authModalOpen);
   const authModalMode = useSessionStore((state) => state.authModalMode);
   const openAuthModal = useSessionStore((state) => state.openAuthModal);
@@ -76,11 +75,6 @@ function AppLayout() {
     const requestedMode = params.get("auth");
     if (!session.data.authenticated && (requestedMode === "login" || requestedMode === "register")) {
       openAuthModal(requestedMode);
-      return;
-    }
-
-    if (!session.data.authenticated && session.data.guestAccess?.authRequired && location.pathname.startsWith("/app")) {
-      openAuthModal("login");
       return;
     }
 
@@ -179,16 +173,6 @@ function AppLayout() {
         onModeChange={handleAuthModeChange}
         onAuthenticated={handleAuthSuccess}
       />
-
-      {!authenticated && guestAccess?.authRequired && !authModalOpen && (
-        <button
-          type="button"
-          className="auth-reopen-button"
-          onClick={() => openAuthModal("login")}
-        >
-          Sign in to continue
-        </button>
-      )}
     </div>
   );
 }

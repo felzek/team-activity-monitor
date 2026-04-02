@@ -18,9 +18,11 @@ export interface DisplayMessage {
 
 interface Props {
   messages: DisplayMessage[];
+  guestLocked?: boolean;
+  onLockedInteraction?: () => void;
 }
 
-export function MessageList({ messages }: Props) {
+export function MessageList({ messages, guestLocked = false, onLockedInteraction }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,7 +42,14 @@ export function MessageList({ messages }: Props) {
         if (m.role === "thinking") {
           return <ThinkingMessage key={m.id} status={m.status} />;
         }
-        return <AssistantMessage key={m.id} result={m.result!} />;
+        return (
+          <AssistantMessage
+            key={m.id}
+            result={m.result!}
+            guestLocked={guestLocked}
+            onLockedInteraction={onLockedInteraction}
+          />
+        );
       })}
       <div ref={bottomRef} />
     </div>

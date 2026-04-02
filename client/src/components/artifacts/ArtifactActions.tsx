@@ -7,6 +7,8 @@ interface Props {
   suggestions: ArtifactSuggestion[];
   conversationId?: string;
   messageId?: string;
+  locked?: boolean;
+  onLockedInteraction?: () => void;
 }
 
 const BUTTON_CONFIG: Record<string, { label: string; icon: string }> = {
@@ -18,7 +20,13 @@ const BUTTON_CONFIG: Record<string, { label: string; icon: string }> = {
   pptx_export:   { label: "Export PowerPoint", icon: "PPT" },
 };
 
-export function ArtifactActions({ suggestions, conversationId, messageId }: Props) {
+export function ArtifactActions({
+  suggestions,
+  conversationId,
+  messageId,
+  locked = false,
+  onLockedInteraction,
+}: Props) {
   const createArtifact = useArtifactStore((s) => s.createArtifact);
   const artifacts = useArtifactStore((s) => s.artifacts);
 
@@ -29,6 +37,10 @@ export function ArtifactActions({ suggestions, conversationId, messageId }: Prop
   if (!suggestions || suggestions.length === 0) return null;
 
   const handleCreate = async (suggestion: ArtifactSuggestion, index: number) => {
+    if (locked) {
+      onLockedInteraction?.();
+      return;
+    }
     if (creating[index] || createdIds[index]) return;
 
     setCreating((prev) => ({ ...prev, [index]: true }));
@@ -57,9 +69,9 @@ export function ArtifactActions({ suggestions, conversationId, messageId }: Prop
           return (
             <button
               key={i}
-              className={`artifact-suggest-btn ${alreadyCreated ? "created" : ""}`}
+              className={`artifact-suggest-btn ${alreadyCreated ? "created" : ""}${locked ? " is-locked" : ""}`}
               onClick={() => handleCreate(s, i)}
-              disabled={isCreating || alreadyCreated}
+              disabled={!locked && (isCreating || alreadyCreated)}
               title={s.description}
             >
               <span className="artifact-suggest-icon">{cfg.icon}</span>

@@ -43,6 +43,10 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const updateConversation = useChatStore((s) => s.updateConversation);
   const createConversation = useChatStore((s) => s.createConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
+  const guestWorkspace = !authenticated;
+  const requestAuth = useCallback(() => {
+    openAuthModal("login");
+  }, [openAuthModal]);
 
   // Set default model once models load
   useEffect(() => {
@@ -124,16 +128,24 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   }, []);
 
   const handleActionSelect = useCallback((action: ArtifactQuickAction) => {
+    if (guestWorkspace) {
+      requestAuth();
+      return;
+    }
     setSelectedAction(action);
     setInput(action.prompt);
     setFocusToken((token) => token + 1);
-  }, []);
+  }, [guestWorkspace, requestAuth]);
 
   const handleSuggestionSelect = useCallback((text: string) => {
+    if (guestWorkspace) {
+      requestAuth();
+      return;
+    }
     setSelectedAction(null);
     setInput(text);
     setFocusToken((token) => token + 1);
-  }, []);
+  }, [guestWorkspace, requestAuth]);
 
   const handleClearIntent = useCallback(() => {
     setSelectedAction(null);
@@ -144,7 +156,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     const text = input.trim();
     if (!text || chatTurn.isPending) return;
     if (!authenticated && guestAccess?.authRequired) {
-      openAuthModal("login");
+      requestAuth();
       return;
     }
     const pendingAction = selectedAction;
@@ -199,9 +211,6 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
         onSuccess: (result) => {
           if (result.guestAccess) {
             setGuestAccess(result.guestAccess);
-            if (!authenticated && result.guestAccess.authRequired) {
-              openAuthModal("login");
-            }
           }
           setMessages((prev) =>
             prev
@@ -219,7 +228,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
             if (payload?.guestAccess) {
               setGuestAccess(payload.guestAccess);
             }
-            openAuthModal("login");
+            requestAuth();
           }
           setMessages((prev) =>
             prev
@@ -253,7 +262,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
     loadConversations,
     messages.length,
     modelId,
-    openAuthModal,
+    requestAuth,
     selectedAction,
     setGuestAccess,
     updateConversation,
@@ -264,7 +273,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const guestHelperText = guestLimitReached
     ? "You’ve used all 5 guest prompts. Sign in to continue in this workspace."
     : !authenticated && guestAccess
-      ? `${guestAccess.promptsRemaining} of ${guestAccess.promptLimit} guest prompts left before sign-in is required.`
+      ? `${guestAccess.promptsRemaining} of ${guestAccess.promptLimit} guest prompts left. The sample workspace is unlocked for prompting only.`
       : "Grounded in your connected workspace data.";
 
   return (
@@ -298,10 +307,14 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
           onClearIntent={handleClearIntent}
           focusToken={focusToken}
           helperText={guestHelperText}
+          lockSecondaryActions={guestWorkspace}
+          onLockedInteraction={requestAuth}
         />
       ) : (
         <MessageList
           messages={messages}
+          guestLocked={guestWorkspace}
+          onLockedInteraction={requestAuth}
         />
       )}
 
@@ -317,6 +330,8 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
           onClearIntent={handleClearIntent}
           focusToken={focusToken}
           helperText={guestHelperText}
+          lockModelSelection={guestWorkspace}
+          onLockedInteraction={requestAuth}
         />
       )}
     </div>

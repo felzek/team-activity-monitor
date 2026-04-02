@@ -113,6 +113,8 @@ interface Props {
   onClearIntent: () => void;
   focusToken: number;
   helperText?: string;
+  lockSecondaryActions?: boolean;
+  onLockedInteraction?: () => void;
 }
 
 export function ChatWelcomeState({
@@ -128,11 +130,17 @@ export function ChatWelcomeState({
   onClearIntent,
   focusToken,
   helperText,
+  lockSecondaryActions = false,
+  onLockedInteraction,
 }: Props) {
   const [moreOpen, setMoreOpen] = useState(false);
   const isComposing = value.trim().length > 0;
 
   const handleActionSelect = (action: ArtifactQuickAction) => {
+    if (lockSecondaryActions) {
+      onLockedInteraction?.();
+      return;
+    }
     onActionSelect(action);
     setMoreOpen(false);
   };
@@ -161,6 +169,8 @@ export function ChatWelcomeState({
           intentLabel={selectedAction ? `Creating: ${selectedAction.label}` : null}
           onClearIntent={onClearIntent}
           focusToken={focusToken}
+          lockModelSelection={lockSecondaryActions}
+          onLockedInteraction={onLockedInteraction}
         />
 
         <div className={`chat-welcome-actions${isComposing ? " is-muted" : ""}`}>
@@ -174,7 +184,7 @@ export function ChatWelcomeState({
               <button
                 key={action.id}
                 type="button"
-                className={`chat-welcome-action${selectedAction?.id === action.id ? " is-selected" : ""}`}
+                className={`chat-welcome-action${selectedAction?.id === action.id ? " is-selected" : ""}${lockSecondaryActions ? " is-locked" : ""}`}
                 onClick={() => handleActionSelect(action)}
                 title={action.hint}
               >
@@ -185,8 +195,14 @@ export function ChatWelcomeState({
 
             <button
               type="button"
-              className={`chat-welcome-action chat-welcome-action--more${moreOpen ? " is-selected" : ""}`}
-              onClick={() => setMoreOpen((open) => !open)}
+              className={`chat-welcome-action chat-welcome-action--more${moreOpen ? " is-selected" : ""}${lockSecondaryActions ? " is-locked" : ""}`}
+              onClick={() => {
+                if (lockSecondaryActions) {
+                  onLockedInteraction?.();
+                  return;
+                }
+                setMoreOpen((open) => !open);
+              }}
               aria-expanded={moreOpen}
             >
               <MoreIcon />
@@ -202,7 +218,7 @@ export function ChatWelcomeState({
                   <button
                     key={action.id}
                     type="button"
-                    className={`chat-welcome-action${selectedAction?.id === action.id ? " is-selected" : ""}`}
+                    className={`chat-welcome-action${selectedAction?.id === action.id ? " is-selected" : ""}${lockSecondaryActions ? " is-locked" : ""}`}
                     onClick={() => handleActionSelect(action)}
                     title={action.hint}
                   >
@@ -218,7 +234,7 @@ export function ChatWelcomeState({
                   <button
                     key={preview.label}
                     type="button"
-                    className="chat-welcome-preview-card"
+                    className={`chat-welcome-preview-card${lockSecondaryActions ? " is-locked" : ""}`}
                     onClick={() => handleActionSelect({ ...IMAGE_ACTION, prompt: preview.prompt })}
                     title={preview.alt}
                   >
@@ -237,8 +253,14 @@ export function ChatWelcomeState({
             <button
               key={example}
               type="button"
-              className="chat-welcome-ask-link"
-              onClick={() => onSuggestionSelect(example)}
+              className={`chat-welcome-ask-link${lockSecondaryActions ? " is-locked" : ""}`}
+              onClick={() => {
+                if (lockSecondaryActions) {
+                  onLockedInteraction?.();
+                  return;
+                }
+                onSuggestionSelect(example);
+              }}
             >
               {example}
             </button>

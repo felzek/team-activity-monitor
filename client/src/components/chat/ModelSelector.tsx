@@ -3,9 +3,11 @@ import { useModels } from "@/hooks/useModels";
 interface Props {
   value: string;
   onChange: (id: string) => void;
+  locked?: boolean;
+  onLockedClick?: () => void;
 }
 
-export function ModelSelector({ value, onChange }: Props) {
+export function ModelSelector({ value, onChange, locked = false, onLockedClick }: Props) {
   const { data: models, isLoading } = useModels();
 
   if (isLoading) {
@@ -24,6 +26,23 @@ export function ModelSelector({ value, onChange }: Props) {
       <select className="model-selector" disabled>
         <option>No models available — configure AI Gateway or add a provider key</option>
       </select>
+    );
+  }
+
+  if (locked) {
+    const activeModel =
+      displayModels.find((model) => model.id === value) ??
+      displayModels[0];
+
+    return (
+      <button
+        type="button"
+        className="model-selector model-selector--locked"
+        onClick={onLockedClick}
+      >
+        {activeModel.displayName}
+        <span className="model-selector-lock">Sign in to switch</span>
+      </button>
     );
   }
 
