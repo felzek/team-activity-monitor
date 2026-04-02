@@ -17,6 +17,10 @@ export interface SessionResponse {
     name: string;
   };
   guestAccess: GuestAccess | null;
+  llmProviderKeys: Array<{
+    provider: "openai" | "gemini" | "claude";
+    savedAt: string;
+  }>;
   providerAuth: {
     providerModes: Record<"github" | "jira" | "google", "oauth" | "unavailable">;
   };
@@ -42,6 +46,7 @@ export function useSession() {
         userEmail: query.data.user?.email ?? null,
         orgName: query.data.currentOrganization?.name ?? null,
         guestAccess: query.data.guestAccess ?? null,
+        connectedLlmProviders: query.data.llmProviderKeys.map((entry) => entry.provider),
       });
     }
   }, [query.data, setSession]);

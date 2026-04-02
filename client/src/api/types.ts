@@ -59,10 +59,17 @@ export interface IntelligenceBoard extends IntelligenceOverview {
 // LLM / Chat
 export interface LlmModel {
   id: string;
-  provider: string;
+  provider: "gateway" | "openai" | "gemini" | "claude" | "local";
+  providerModelId: string;
   displayName: string;
+  supportsChat: boolean;
+  supportsStreaming: boolean;
   supportsTools: boolean;
-  isDefault: boolean;
+  supportsVision: boolean;
+  status: "available" | "deprecated" | "unavailable";
+  isDefaultCandidate: boolean;
+  isPinned: boolean;
+  sortOrder: number;
 }
 
 export interface ChatMessage {

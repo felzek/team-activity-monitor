@@ -10,10 +10,25 @@ import { useModels } from "@/hooks/useModels";
 import { useChatStore } from "@/store/chatStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { ApiError } from "@/api/client";
-import type { ChatMessage, ChatTurnResult } from "@/api/types";
+import type { ChatMessage, ChatTurnResult, LlmModel } from "@/api/types";
 
 let nextId = 1;
 const uid = () => String(nextId++);
+
+function preferredModel(models: LlmModel[]): LlmModel | undefined {
+  const availableModels = models.filter((model) => model.status === "available");
+
+  return (
+    availableModels.find(
+      (model) =>
+        model.provider === "local" && (model.isPinned || model.isDefaultCandidate)
+    ) ??
+    availableModels.find((model) => model.provider === "local") ??
+    availableModels.find((model) => model.isPinned) ??
+    availableModels.find((model) => model.isDefaultCandidate) ??
+    availableModels[0]
+  );
+}
 
 interface Props {
   conversationId: string | null;
@@ -50,9 +65,18 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
 
   // Set default model once models load
   useEffect(() => {
-    if (models && models.length > 0 && !modelId) {
-      const toolModels = models.filter((m) => m.supportsTools);
-      setModelId((toolModels[0] ?? models[0]).id);
+    if (!models || models.length === 0) {
+      return;
+    }
+
+    const currentModel = models.find((model) => model.id === modelId);
+    if (currentModel && currentModel.status === "available") {
+      return;
+    }
+
+    const nextDefault = preferredModel(models);
+    if (nextDefault) {
+      setModelId(nextDefault.id);
     }
   }, [models, modelId]);
 

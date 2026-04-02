@@ -16,6 +16,11 @@ interface LlmKeysResponse {
 
 export function LlmProviders() {
   const qc = useQueryClient();
+  const refreshQueries = () => {
+    void qc.invalidateQueries({ queryKey: ["llm-keys"] });
+    void qc.invalidateQueries({ queryKey: ["llm-models"] });
+    void qc.invalidateQueries({ queryKey: ["session"] });
+  };
   const { data } = useQuery({
     queryKey: ["llm-keys"],
     queryFn: () => apiFetch<LlmKeysResponse>("/api/v1/auth/llm-keys"),
@@ -38,8 +43,8 @@ export function LlmProviders() {
             key={p.id}
             provider={p}
             hasSavedKey={savedProviders.has(p.id)}
-            onSaved={() => void qc.invalidateQueries({ queryKey: ["llm-keys"] })}
-            onRemoved={() => void qc.invalidateQueries({ queryKey: ["llm-keys"] })}
+            onSaved={refreshQueries}
+            onRemoved={refreshQueries}
           />
         ))}
       </div>
