@@ -9,7 +9,6 @@ interface SessionStore {
   userEmail: string | null;
   orgName: string | null;
   guestAccess: GuestAccess | null;
-  connectedLlmProviders: Array<"openai" | "gemini" | "claude">;
   authModalOpen: boolean;
   authModalMode: "login" | "register";
   setSession: (session: {
@@ -20,7 +19,6 @@ interface SessionStore {
     userEmail: string | null;
     orgName: string | null;
     guestAccess: GuestAccess | null;
-    connectedLlmProviders: Array<"openai" | "gemini" | "claude">;
   }) => void;
   setGuestAccess: (guestAccess: GuestAccess | null) => void;
   openAuthModal: (mode?: "login" | "register") => void;
@@ -35,7 +33,6 @@ export const useSessionStore = create<SessionStore>()((set) => ({
   userEmail: null,
   orgName: null,
   guestAccess: null,
-  connectedLlmProviders: [],
   authModalOpen: false,
   authModalMode: "login",
   setSession: (session) =>
@@ -47,7 +44,6 @@ export const useSessionStore = create<SessionStore>()((set) => ({
       userEmail: session.userEmail,
       orgName: session.orgName,
       guestAccess: session.guestAccess,
-      connectedLlmProviders: session.connectedLlmProviders,
       authModalOpen: session.authenticated ? false : state.authModalOpen,
     })),
   setGuestAccess: (guestAccess) => set({ guestAccess }),

@@ -69,6 +69,7 @@ export interface LlmModel {
   status: "available" | "deprecated" | "unavailable";
   isDefaultCandidate: boolean;
   isPinned: boolean;
+  availabilityReason?: string;
   sortOrder: number;
 }
 

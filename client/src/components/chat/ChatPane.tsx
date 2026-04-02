@@ -19,11 +19,6 @@ function preferredModel(models: LlmModel[]): LlmModel | undefined {
   const availableModels = models.filter((model) => model.status === "available");
 
   return (
-    availableModels.find(
-      (model) =>
-        model.provider === "local" && (model.isPinned || model.isDefaultCandidate)
-    ) ??
-    availableModels.find((model) => model.provider === "local") ??
     availableModels.find((model) => model.isPinned) ??
     availableModels.find((model) => model.isDefaultCandidate) ??
     availableModels[0]

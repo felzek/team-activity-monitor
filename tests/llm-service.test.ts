@@ -98,12 +98,18 @@ const logger = { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() } 
 describe("LlmService.listModels", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it("returns empty array when no providers connected", async () => {
+  it("returns locked BYOK entries when no providers are connected", async () => {
     const db = makeDb({});
     const registry = new LlmProviderRegistry();
     const service = new LlmService(registry, db as never, logger);
     const models = await service.listModels("user1");
-    expect(models).toEqual([]);
+
+    expect(models.map((entry) => entry.id)).toEqual([
+      "claude:claude-sonnet-4-6-20251022",
+      "openai:gpt-5.4",
+      "gemini:models/gemini-2.0-flash-001",
+    ]);
+    expect(models.every((entry) => entry.status === "unavailable")).toBe(true);
   });
 
   it("includes Vercel AI Gateway models without requiring a stored user key", async () => {
@@ -113,8 +119,10 @@ describe("LlmService.listModels", () => {
     );
     const service = new LlmService(registry, db as never, logger);
     const models = await service.listModels("user1");
-    expect(models).toHaveLength(1);
+
+    expect(models).toHaveLength(4);
     expect(models[0].provider).toBe("gateway");
+    expect(models[0]?.isPinned).toBe(true);
   });
 
   it("returns locked BYOK provider entries when no user key is saved", async () => {
@@ -147,8 +155,9 @@ describe("LlmService.listModels", () => {
       openai: "sk-server-default",
     });
     const models = await service.listModels("user1");
-    expect(models).toHaveLength(1);
-    expect(models[0].id).toBe("openai:gpt-5.4");
+    expect(models).toHaveLength(3);
+    expect(models.find((entry) => entry.id === "openai:gpt-5.4")?.status).toBe("available");
+    expect(models.filter((entry) => entry.provider !== "openai").every((entry) => entry.status === "unavailable")).toBe(true);
   });
 
   it("aggregates models from a single provider", async () => {
@@ -158,8 +167,10 @@ describe("LlmService.listModels", () => {
     );
     const service = new LlmService(registry, db as never, logger);
     const models = await service.listModels("user1");
-    expect(models).toHaveLength(1);
+    expect(models).toHaveLength(3);
     expect(models[0].provider).toBe("claude");
+    expect(models[1]?.status).toBe("unavailable");
+    expect(models[2]?.status).toBe("unavailable");
   });
 
   it("aggregates models from all three providers", async () => {
@@ -188,23 +199,32 @@ describe("LlmService.listModels", () => {
     expect(models[2].provider).toBe("gemini");
   });
 
-  it("silently omits a provider that fails to list models", async () => {
+  it("marks a provider unavailable when model listing fails", async () => {
     const db = makeDb({ claude: "sk-ant", openai: "sk-oai" });
     const registry = new LlmProviderRegistry()
       .register(makeAdapter("claude", [model("claude", "opus")]))
       .register(makeFailingAdapter("openai", new Error("HTTP 503")));
     const service = new LlmService(registry, db as never, logger);
     const models = await service.listModels("user1");
-    expect(models).toHaveLength(1);
+    expect(models).toHaveLength(3);
     expect(models[0].provider).toBe("claude");
+    expect(models[1]).toMatchObject({
+      provider: "openai",
+      status: "unavailable",
+    });
   });
 
-  it("returns empty array if provider returns invalid/empty model list", async () => {
+  it("returns unavailable placeholders if a provider returns no chat models", async () => {
     const db = makeDb({ openai: "sk-oai" });
     const registry = new LlmProviderRegistry().register(makeAdapter("openai", []));
     const service = new LlmService(registry, db as never, logger);
     const models = await service.listModels("user1");
-    expect(models).toEqual([]);
+
+    expect(models).toHaveLength(3);
+    expect(models[1]).toMatchObject({
+      provider: "openai",
+      status: "unavailable",
+    });
   });
 
   it("skips provider if key decryption returns null", async () => {

@@ -336,6 +336,15 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("SESSION_SECRET must be set to a strong value for Vercel and production deployments.");
   }
 
+  const vercelRuntimeRequiresGateway =
+    isVercel && (env.VERCEL_ENV === "preview" || env.VERCEL_ENV === "production");
+
+  if (vercelRuntimeRequiresGateway && (!gatewayConfigured || !defaultModelId.startsWith("gateway:"))) {
+    throw new Error(
+      "Vercel preview and production deployments must configure AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN and set a gateway-backed DEFAULT_MODEL_ID."
+    );
+  }
+
   if (defaultModelId.startsWith("gateway:") && !gatewayConfigured) {
     throw new Error(
       "DEFAULT_MODEL_ID points at Vercel AI Gateway, but neither AI_GATEWAY_API_KEY nor VERCEL_OIDC_TOKEN is configured."

@@ -1,6 +1,5 @@
 import { useModels } from "@/hooks/useModels";
 import type { LlmModel } from "@/api/types";
-import { useSessionStore } from "@/store/sessionStore";
 
 interface Props {
   value: string;
@@ -8,66 +7,6 @@ interface Props {
   locked?: boolean;
   onLockedClick?: () => void;
 }
-
-type DirectProvider = Extract<LlmModel["provider"], "openai" | "claude" | "gemini">;
-
-interface DisplayModel extends LlmModel {
-  disabled?: boolean;
-}
-
-const LOCKED_PROVIDER_MODELS: Record<DirectProvider, DisplayModel[]> = {
-  openai: [
-    {
-      id: "openai:gpt-5.4",
-      provider: "openai",
-      providerModelId: "gpt-5.4",
-      displayName: "GPT-5.4",
-      supportsChat: true,
-      supportsStreaming: true,
-      supportsTools: true,
-      supportsVision: true,
-      status: "unavailable",
-      isDefaultCandidate: false,
-      isPinned: false,
-      sortOrder: 5,
-      disabled: true,
-    },
-  ],
-  claude: [
-    {
-      id: "claude:claude-sonnet-4-6-20251022",
-      provider: "claude",
-      providerModelId: "claude-sonnet-4-6-20251022",
-      displayName: "Claude Sonnet 4.6",
-      supportsChat: true,
-      supportsStreaming: true,
-      supportsTools: true,
-      supportsVision: true,
-      status: "unavailable",
-      isDefaultCandidate: false,
-      isPinned: false,
-      sortOrder: 10,
-      disabled: true,
-    },
-  ],
-  gemini: [
-    {
-      id: "gemini:models/gemini-2.0-flash-001",
-      provider: "gemini",
-      providerModelId: "models/gemini-2.0-flash-001",
-      displayName: "Gemini 2.0 Flash",
-      supportsChat: true,
-      supportsStreaming: true,
-      supportsTools: true,
-      supportsVision: true,
-      status: "unavailable",
-      isDefaultCandidate: false,
-      isPinned: false,
-      sortOrder: 30,
-      disabled: true,
-    },
-  ],
-};
 
 function providerLabel(provider: LlmModel["provider"]): string {
   switch (provider) {
@@ -96,8 +35,6 @@ function optionLabel(model: LlmModel, duplicateNames: Set<string>): string {
 
 export function ModelSelector({ value, onChange, locked = false, onLockedClick }: Props) {
   const { data: models, isLoading } = useModels();
-  const authenticated = useSessionStore((state) => state.authenticated);
-  const connectedLlmProviders = useSessionStore((state) => state.connectedLlmProviders);
 
   if (isLoading) {
     return (
@@ -107,18 +44,7 @@ export function ModelSelector({ value, onChange, locked = false, onLockedClick }
     );
   }
 
-  const availableModels = models ?? [];
-  const visibleProviders = new Set(availableModels.map((model) => model.provider));
-  const disconnectedProviderModels = authenticated
-    ? (["openai", "claude", "gemini"] as const)
-        .filter(
-          (provider) =>
-            !connectedLlmProviders.includes(provider) &&
-            !visibleProviders.has(provider)
-        )
-        .flatMap((provider) => LOCKED_PROVIDER_MODELS[provider])
-    : [];
-  const displayModels: DisplayModel[] = [...availableModels, ...disconnectedProviderModels];
+  const displayModels = models ?? [];
   const duplicateNames = new Set(
     displayModels
       .map((model) => model.displayName)
@@ -136,7 +62,7 @@ export function ModelSelector({ value, onChange, locked = false, onLockedClick }
   if (locked) {
     const activeModel =
       displayModels.find((model) => model.id === value) ??
-      displayModels.find((model) => !model.disabled && model.status === "available") ??
+      displayModels.find((model) => model.status === "available") ??
       displayModels[0];
 
     return (
@@ -161,11 +87,11 @@ export function ModelSelector({ value, onChange, locked = false, onLockedClick }
         <option
           key={m.id}
           value={m.id}
-          disabled={m.disabled || m.status !== "available"}
+          disabled={m.status !== "available"}
         >
           {m.status === "available"
             ? optionLabel(m, duplicateNames)
-            : `${optionLabel(m, duplicateNames)} — add ${providerLabel(m.provider)} key`}
+            : `${optionLabel(m, duplicateNames)} — ${m.availabilityReason ?? `${providerLabel(m.provider)} unavailable`}`}
         </option>
       ))}
     </select>

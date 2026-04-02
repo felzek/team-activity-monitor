@@ -46,7 +46,6 @@ export function useSession() {
         userEmail: query.data.user?.email ?? null,
         orgName: query.data.currentOrganization?.name ?? null,
         guestAccess: query.data.guestAccess ?? null,
-        connectedLlmProviders: query.data.llmProviderKeys.map((entry) => entry.provider),
       });
     }
   }, [query.data, setSession]);

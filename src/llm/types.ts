@@ -38,6 +38,7 @@ export interface NormalizedModel {
   status: ModelStatus;
   isDefaultCandidate: boolean;
   isPinned: boolean;
+  availabilityReason?: string;
   latencyTier?: LatencyTier;
   reasoningTier?: ReasoningTier;
   /** Lower = higher priority in sorted list */
