@@ -179,10 +179,6 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || chatTurn.isPending) return;
-    if (!authenticated && guestAccess?.authRequired) {
-      requestAuth();
-      return;
-    }
     const pendingAction = selectedAction;
 
     setInput("");
@@ -261,10 +257,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
                 id: uid(),
                 role: "assistant",
                 result: {
-                  answer:
-                    err instanceof ApiError && err.code === "GUEST_AUTH_REQUIRED"
-                      ? "You’ve reached the 5-prompt guest limit. Sign in to continue this thread."
-                      : `Error: ${err.message}`,
+                  answer: `Error: ${err.message}`,
                   toolsUsed: [],
                   tokenUsage: null,
                   totalLatencyMs: 0,
@@ -293,20 +286,17 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
   ]);
 
   const showWelcomeState = !loadingMessages && messages.length === 0;
-  const guestLimitReached = !authenticated && Boolean(guestAccess?.authRequired);
-  const guestHelperText = guestLimitReached
-    ? "Sign in to continue your session."
-    : !authenticated && guestAccess
-      ? "The sample workspace is unlocked for prompting only."
-      : "Grounded in your connected workspace data.";
+  const guestHelperText = !authenticated && guestAccess
+    ? "The sample workspace is unlocked for prompting only."
+    : "Grounded in your connected workspace data.";
 
   return (
     <div className="chat-pane">
       <div className={`chat-pane-header${showWelcomeState ? " chat-pane-header--empty" : ""}`}>
         <span className="chat-pane-title">{chatTitle}</span>
         {!authenticated && guestAccess && (
-          <span className={`chat-guest-pill${guestLimitReached ? " is-exhausted" : ""}`}>
-            {guestLimitReached ? "Sign in to continue" : "Guest preview"}
+          <span className="chat-guest-pill">
+            Guest preview
           </span>
         )}
       </div>
@@ -320,7 +310,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
           value={input}
           onChange={handleInputChange}
           onSubmit={sendMessage}
-          disabled={chatTurn.isPending || loadingMessages || guestLimitReached}
+          disabled={chatTurn.isPending || loadingMessages}
           modelId={modelId}
           onModelChange={setModelId}
           selectedAction={selectedAction}
@@ -345,7 +335,7 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
           value={input}
           onChange={handleInputChange}
           onSubmit={sendMessage}
-          disabled={chatTurn.isPending || loadingMessages || guestLimitReached}
+          disabled={chatTurn.isPending || loadingMessages}
           modelId={modelId}
           onModelChange={setModelId}
           intentLabel={selectedAction ? `Creating: ${selectedAction.label}` : null}

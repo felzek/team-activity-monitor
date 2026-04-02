@@ -67,7 +67,6 @@ import type { GuestAccess, LlmProvider, OrganizationSettings, OrganizationSummar
 import type { ActivitySummary, ParsedQuery, ProviderIntegrationContext } from "./types/activity.js";
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
-const GUEST_PROMPT_LIMIT = 1000;
 
 function sendPublicFile(response: express.Response, fileName: string): void {
   response.sendFile(fileName, { root: PUBLIC_DIR });
@@ -79,14 +78,8 @@ function buildGitHubLoginPath(returnTo: unknown = "/app"): string {
 }
 
 function buildGuestAccess(request: express.Request): GuestAccess {
-  const promptCount = Math.max(0, Math.min(request.session.guestPromptCount ?? 0, GUEST_PROMPT_LIMIT));
-  const promptsRemaining = Math.max(GUEST_PROMPT_LIMIT - promptCount, 0);
-
   return {
-    promptCount,
-    promptLimit: GUEST_PROMPT_LIMIT,
-    promptsRemaining,
-    authRequired: promptCount >= GUEST_PROMPT_LIMIT
+    isActive: true
   };
 }
 
@@ -1938,14 +1931,6 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
     "/api/v1/chat",
     async (request, response) => {
       const isAuthenticated = Boolean(request.session.userId);
-      if (!isAuthenticated && buildGuestAccess(request).authRequired) {
-        response.status(401).json({
-          error: "Sign in to continue after your 5 guest prompts.",
-          code: "GUEST_AUTH_REQUIRED",
-          guestAccess: buildGuestAccess(request)
-        });
-        return;
-      }
 
       const bodySchema = z.object({
         message: z.string().min(1).max(4096),
@@ -2003,10 +1988,7 @@ export function createApp(config: AppConfig, logger: Logger, database: AppDataba
             requestLogger
           );
 
-          request.session.guestPromptCount = Math.min(
-            (request.session.guestPromptCount ?? 0) + 1,
-            GUEST_PROMPT_LIMIT
-          );
+          request.session.guestPromptCount = (request.session.guestPromptCount ?? 0) + 1;
 
           response.json({
             ...previewResult,

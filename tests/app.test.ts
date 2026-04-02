@@ -582,15 +582,15 @@ describe("enterprise api routes", () => {
     cleanupTestConfig(config);
   });
 
-  it("lets guests use five chat prompts before requiring auth", async () => {
+  it("lets guests use chat prompts without auth limits", async () => {
     const config = buildTestConfig();
     const database = initializeDatabase(config);
-    const app = createApp(config, logger.child({ test: "guest-chat-limit" }), database);
+    const app = createApp(config, logger.child({ test: "guest-chat-no-limit" }), database);
     const agent = request.agent(app);
 
     mockRepeatedLocalModelResponse();
 
-    for (let index = 1; index <= 5; index += 1) {
+    for (let index = 1; index <= 3; index += 1) {
       const response = await postWithCsrf(agent, "/api/v1/chat", {
         message: "What is John working on this week?",
         modelId: "local:qwen2.5:7b",
@@ -599,21 +599,8 @@ describe("enterprise api routes", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.answer).toContain("### Summary");
-      expect(response.body.guestAccess.promptCount).toBe(index);
-      expect(response.body.guestAccess.promptsRemaining).toBe(5 - index);
-      expect(response.body.guestAccess.authRequired).toBe(index === 5);
+      expect(response.body.guestAccess.isActive).toBe(true);
     }
-
-    const blockedResponse = await postWithCsrf(agent, "/api/v1/chat", {
-      message: "One more prompt",
-      modelId: "local:qwen2.5:7b",
-      history: []
-    });
-
-    expect(blockedResponse.status).toBe(401);
-    expect(blockedResponse.body.code).toBe("GUEST_AUTH_REQUIRED");
-    expect(blockedResponse.body.guestAccess.promptCount).toBe(5);
-    expect(blockedResponse.body.guestAccess.authRequired).toBe(true);
 
     database.close();
     cleanupTestConfig(config);
@@ -641,7 +628,6 @@ describe("enterprise api routes", () => {
     expect(sessionResponse.status).toBe(200);
     expect(response.status).toBe(200);
     expect(response.body.answer).toContain("### Summary");
-    expect(response.body.guestAccess.promptCount).toBe(1);
 
     database.close();
     cleanupTestConfig(config);

@@ -78,10 +78,7 @@ export interface ChatMessage {
 }
 
 export interface GuestAccess {
-  promptCount: number;
-  promptLimit: number;
-  promptsRemaining: number;
-  authRequired: boolean;
+  isActive: boolean;
 }
 
 export interface ChatTurnRequest {
