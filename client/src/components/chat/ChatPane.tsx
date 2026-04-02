@@ -204,7 +204,6 @@ export function ChatPane({ conversationId, seedText, onSeedConsumed }: Props) {
         const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
         const conv = await createConversation({ title });
         activeId = conv.id;
-        currentConvRef.current = activeId;
         setChatTitle(title);
       } catch {
         // Non-fatal: UI already transitioned, continue without a saved conversation
